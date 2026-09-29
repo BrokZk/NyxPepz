@@ -2,7 +2,36 @@ const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand()}
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let activeCategory="Tous";let me={},products=[],chart,packs=[],promoIndex=0,promoTimer,promoTouchX=0;
 const toast=m=>{let t=$("#toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2200)};
 async function api(u,o={}){o.headers={"Content-Type":"application/json",...(o.headers||{})};let r=await fetch(u,o),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur");return d}
-function go(id){$$(".page").forEach(x=>x.classList.remove("active"));$("#"+id)?.classList.add("active");$$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});if(id==="catalog"){$("#search").value="";renderCatalog("Tous")}if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo(0,0)}
+const pageTrail=[];let returningToPage=false;
+function go(id){
+ const target=$("#"+id);if(!target?.classList.contains('page'))return;
+ const current=$('.page.active');
+ if(!returningToPage&&current&&current.id!==id){
+  if(id==='home')pageTrail.length=0;
+  else {pageTrail.push({id:current.id,scroll:window.scrollY,category:activeCategory,query:$('#search').value});if(pageTrail.length>30)pageTrail.shift();}
+ }
+ $$(".page").forEach(x=>x.classList.remove("active"));target.classList.add("active");
+ $$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
+ if(id==="catalog"&&!returningToPage){$("#search").value="";renderCatalog("Tous")}
+ if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo({top:0,behavior:'instant'});
+}
+function goBack(){
+ const dialog=$('dialog[open]');if(dialog){dialog.close();return;}
+ const page=$('.page.active');if(!page||page.id==='home')return;
+ let internal;
+ if(page.id==='catalog')internal=$('#filters .category-back');
+ if(page.id==='protocols')internal=!$('#protocolDetail').hidden?$('#protocolDetail > button'):$('#protocolList .protocol-list-head > button');
+ if(page.id==='encyclopedia'&&!$('#encyclopediaDetail').hidden)internal=$('#encyclopediaDetail > button');
+ if(page.id==='admin'&&(adminProductCategory||$('#adminProductSearch').value)){
+  adminProductCategory=null;$('#adminProductSearch').value='';renderAdminProducts();scrollTo({top:0,behavior:'instant'});return;
+ }
+ if(internal){internal.click();scrollTo({top:0,behavior:'instant'});return;}
+ const previous=pageTrail.pop()||{id:'home',scroll:0};returningToPage=true;
+ try{go(previous.id);if(previous.id==='catalog'){$('#search').value=previous.query||'';renderCatalog(previous.category||'Tous');}}finally{returningToPage=false;}
+ scrollTo({top:previous.scroll||0,behavior:'instant'});
+}
+$$('.page:not(#home)').forEach(page=>{const back=document.createElement('button');back.type='button';back.className='page-back';back.textContent='‹ Retour';back.setAttribute('aria-label','Revenir en arrière');back.onclick=goBack;page.prepend(back);});
+document.body.classList.add('has-page-back');
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 const meta={"Perte de graisse":["◯","Un corps plus sain, une meilleure sensibilité"],"Régénération":["♧","Des tissus plus forts, une récupération accélérée"],"Beauté · peau":["♙","Un éclat naturel, une régénération visible"],"Nootropiques":["◇","Clarté, concentration et équilibre"],"Performance":["ϟ","Performance et vitalité"],"Longévité":["∞","Longévité / Anti-âge"],"Libido":["♡","Bien-être et vitalité"]};
 function vial(p){
@@ -129,9 +158,44 @@ function editPack(p){
 }
 async function changeProductPhoto(id,input){try{let url=await uploadPhoto(input);if(!url)return;await api("/api/admin/products/"+id,{method:"PATCH",body:JSON.stringify({image_url:url})});toast("Photo modifiée");loadAdmin();products=await api("/api/catalog");renderCatalog()}catch(e){toast(e.message)}}
 async function changePackPhoto(id,input){try{let url=await uploadPhoto(input);if(!url)return;await api("/api/admin/packs/"+id,{method:"PATCH",body:JSON.stringify({image_url:url})});toast("Photo modifiée");loadAdmin();loadPacks()}catch(e){toast(e.message)}}
+let adminProductItems=[],adminProductCategory=null;
+const adminProductSearch=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/([a-z])([0-9])/g,'$1 $2').replace(/([0-9])([a-z])/g,'$1 $2').replace(/[^a-z0-9]+/g,' ').trim();
+const adminProductCategoryOf=p=>String(p.cat||'').trim()||'Sans catégorie';
+function renderAdminProducts(){
+ const menu=$('#adminProductCategories'),list=$('#adminProducts'),toolbar=$('#adminProductToolbar'),search=$('#adminProductSearch');
+ if(!menu||!list||!toolbar||!search)return;
+ const label=cat=>cat==='Beauté · peau'?'Beauté de la peau':categoryLabels[cat]||cat;
+ const order=['Perte de graisse','Nootropiques','Beauté · peau','Régénération','Performance','Longévité','Libido'];
+ const collator=new Intl.Collator('fr',{numeric:true,sensitivity:'base'});
+ const cats=[...new Set(adminProductItems.map(adminProductCategoryOf))].sort((a,b)=>{const rank=c=>order.includes(c)?order.indexOf(c):99;return rank(a)-rank(b)||collator.compare(a,b);});
+ if(adminProductCategory&&!cats.includes(adminProductCategory))adminProductCategory=null;
+ const tokens=adminProductSearch(search.value).split(' ').filter(Boolean),landing=!adminProductCategory&&!tokens.length;
+ menu.replaceChildren();toolbar.replaceChildren();list.replaceChildren();menu.hidden=!landing;toolbar.hidden=landing;
+ function element(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;}
+ function button(text,handler,cls=''){const node=element('button',cls,text);node.type='button';node.onclick=handler;return node;}
+ if(landing){
+  cats.forEach(cat=>{const items=adminProductItems.filter(p=>adminProductCategoryOf(p)===cat),card=button('',()=>{adminProductCategory=cat;renderAdminProducts();$('#adminProductHeading').focus({preventScroll:true});});card.dataset.adminCategory=cat;
+   const icon=element('span','category-menu-icon',categoryIcons[cat]||'◇');icon.setAttribute('aria-hidden','true');const copy=element('span');copy.append(element('b','',label(cat)),element('small','',items.length+' produit'+(items.length>1?'s':'')));const arrow=element('em','','›');arrow.setAttribute('aria-hidden','true');card.append(icon,copy,arrow);menu.append(card);
+  });
+  if(!cats.length)list.append(element('p','empty-state','Aucun produit pour le moment. Utilisez « Ajouter un produit ».'));
+  return;
+ }
+ const back=button('‹ Toutes les catégories',()=>{adminProductCategory=null;search.value='';renderAdminProducts();menu.querySelector('button')?.focus({preventScroll:true});},'shop-secondary');
+ const shown=adminProductItems.filter(p=>(!adminProductCategory||adminProductCategoryOf(p)===adminProductCategory)&&tokens.every(token=>adminProductSearch(`${p.name} ${p.format} ${label(adminProductCategoryOf(p))}`).includes(token))).sort((a,b)=>collator.compare(a.name,b.name)||collator.compare(a.format||'',b.format||'')||a.id-b.id);
+ const heading=element('h3','',adminProductCategory?label(adminProductCategory):'Résultats de recherche');heading.id='adminProductHeading';heading.tabIndex=-1;
+ toolbar.append(back,heading,element('p','admin-note',shown.length+' produit'+(shown.length!==1?'s':'')));
+ if(!shown.length)list.append(element('p','empty-state','Aucun produit ne correspond à cette recherche.'));
+ shown.forEach(p=>{
+  const row=element('article','admin-row admin-edit card');row.dataset.adminProductId=p.id;
+  const copy=element('div'),name=element('b','',`${p.name} ${p.format||''}`.trim());copy.append(name,element('small','',`${p.price} € · Stock ${p.stock??0} · ${p.active?'Visible':'Masqué'}`));
+  const photo=element('label','mini-upload','📷');photo.setAttribute('aria-label','Changer la photo de '+p.name+' '+(p.format||''));const input=element('input');input.type='file';input.accept='image/png,image/jpeg,image/webp';input.onchange=()=>changeProductPhoto(p.id,input);photo.append(input);
+  row.append(copy,button('Modifier',()=>editProduct(p)),photo,button(p.active?'Masquer':'Afficher',()=>toggleProduct(p.id,!p.active)),button('Supprimer',()=>deleteProduct(p.id),'danger'));list.append(row);
+ });
+}
+$('#adminProductSearch')?.addEventListener('input',renderAdminProducts);
 async function loadAdmin(){if(!me.is_admin)return;try{await loadAdminUsers();
  let ps=await api("/api/admin/products");
- $("#adminProducts").innerHTML=ps.map(p=>`<div class="admin-row admin-edit card"><div><b>${p.name}</b><small>${p.format||""} · ${p.cat} · ${p.price} € · Stock ${p.stock??0}</small></div><button onclick='editProduct(${JSON.stringify(p)})'>Modifier</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changeProductPhoto(${p.id},this)"></label><button onclick="toggleProduct(${p.id},${!p.active})">${p.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deleteProduct(${p.id})">Supprimer</button></div>`).join("");
+ adminProductItems=ps;renderAdminProducts();
  let pk=await api("/api/admin/packs");
  $("#adminPacks").innerHTML=pk.map(x=>`<div class="admin-row admin-edit card"><div><b>${x.title}</b><small>${x.subtitle||""} · ${x.price} € · ordre ${x.sort_order}</small></div><button onclick='editPack(${escapeHTML(JSON.stringify(x))})'>Modifier</button><button onclick="editPackComposition(${x.id})">Composition</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changePackPhoto(${x.id},this)"></label><button onclick="togglePack(${x.id},${!x.active})">${x.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deletePack(${x.id})">Supprimer</button></div>`).join("");
  let ns=await api("/api/admin/news");$("#adminNews").innerHTML=ns.map(n=>`<div class="admin-row card"><div><b>${n.title}</b><small>${n.subtitle||""}</small></div><button class="danger" onclick="deleteNews(${n.id})">Supprimer</button></div>`).join("")

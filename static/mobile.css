@@ -225,3 +225,26 @@ h1,h2,h3,.welcome h1,.promo-copy h2{font-weight:750;letter-spacing:-.35px}
 .protocol-block{padding:18px;margin:14px 0}.protocol-block h3{display:flex;align-items:center;gap:10px;margin:0;color:#b5c9e7;font-size:14px}.protocol-step{display:grid;place-items:center;border-radius:9px;background:#2357ac44;color:#8fbdff;min-width:30px;height:30px;font-size:11px}.protocol-block p{white-space:pre-line;line-height:1.75;font-size:17px;color:#eef5ff;margin:14px 0 0;overflow-wrap:anywhere}
 .protocol-footnote{margin:18px 0;color:#a8bfdf;font-size:12px;line-height:1.7}.protocol-footnote summary{cursor:pointer}.protocol-original{width:100%;margin:10px 0 18px}
 @media(max-width:350px){.protocol-products{gap:9px}.protocol-product{padding:14px 11px}.protocol-product strong{font-size:14px}.protocol-block p{font-size:16px}}
+
+/* Admin product navigation mirrors the storefront and includes hidden products. */
+#adminProductManager{margin:24px 0 28px}
+#adminProductManager>h2{font-size:20px;margin:0 0 8px}
+#adminProductManager [hidden]{display:none!important}
+#adminProductCategories{margin-top:18px}
+#adminProductToolbar{margin:18px 0 12px}
+#adminProductToolbar h3{font-size:21px;margin:18px 0 4px}
+#adminProductToolbar p{margin:4px 0;color:#a9bfdc}
+#adminProducts .admin-row{margin:12px 0;padding:16px;gap:10px}
+#adminProducts .admin-row b{display:block;font-size:17px;line-height:1.5}
+#adminProducts .admin-row small{display:block;font-size:12px;line-height:1.7;color:#afc6e7;margin-top:6px}
+#adminProducts .admin-edit{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px}
+#adminProducts .admin-edit>div{grid-column:1/-1}
+#adminProducts .admin-edit>button:first-of-type{grid-column:1/3;background:#214ca5;color:white;border-color:#517ecc}
+#adminProducts .admin-edit>button:last-child{grid-column:2/4}
+.admin-add-product>summary{cursor:pointer;color:#b9d4ff;font-weight:700;min-height:44px;display:flex;align-items:center;list-style:none}
+.admin-add-product>summary::-webkit-details-marker{display:none}
+.admin-add-product[open]>summary{margin-bottom:14px}
+
+.page-back{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;padding:9px 15px;border:1px solid #385984;border-radius:12px;background:#10213acb;color:#c1d8f9;font-size:14px;font-weight:700;min-height:44px}
+.page-back:hover{background:#173456;border-color:#7baef2}
+.has-page-back #filters .category-back,.has-page-back #protocolDetail>button:first-child,.has-page-back .protocol-list-head>button:first-child,.has-page-back #encyclopediaDetail>button:first-child,.has-page-back #adminProductToolbar>button:first-child{display:none}
