@@ -1,10 +1,24 @@
 """The existing notification worker can also serve the single-button bot menu."""
 import os
+import re
 import secrets
 import time
 import requests
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
+
+WELCOME_TEXT = ('🌙 Bienvenue chez NyxPepz !\n\n'
+                '🔒 Pour votre sécurité, nous ne vous contacterons jamais en message privé '
+                'pour prendre une commande ou vous demander un paiement.\n\n'
+                '🛍️ Toutes les commandes passent exclusivement par notre application, '
+                'accessible via le bouton « 🌙 Ouvrir NyxPepz » ci-dessous.\n\n'
+                'Merci pour votre confiance 💙')
+
+
+def is_group_start(text, username):
+    """Accept this bot's /start, with an optional deep-link argument."""
+    command = re.match(r'^/start(?:@([A-Za-z0-9_]+))?(?:\s|$)', text or '', re.IGNORECASE)
+    return bool(command and (not command.group(1) or command.group(1).lower() == username.lower()))
 
 
 def install_launcher(app, db):
@@ -15,9 +29,11 @@ def install_launcher(app, db):
         owner = db.Column(db.String(64))
 
     configured = False
+    bot_username = ''
+    has_main_app = False
 
     def tick():
-        nonlocal configured
+        nonlocal configured, bot_username, has_main_app
         if os.environ.get('TELEGRAM_LAUNCHER_ENABLED') != '1':
             return
         token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
@@ -33,6 +49,12 @@ def install_launcher(app, db):
                 description = response.json().get('description', '').lower()
                 if method == 'answerCallbackQuery' and ('query is too old' in description or 'query id is invalid' in description):
                     return None
+                if method == 'sendMessage' and isinstance(data.get('chat_id'), int) and data['chat_id'] < 0:
+                    # Closed/deleted topics or missing send rights must not block the
+                    # update queue and private starts for everybody else.
+                    if any(reason in description for reason in ('topic_closed', 'message thread not found',
+                            'not enough rights to send', 'have no rights to send', 'chat_write_forbidden')):
+                        return None
                 if method == 'editMessageReplyMarkup' and 'message is not modified' in description:
                     return None
                 if method == 'editMessageReplyMarkup' and ('message to edit not found' in description or "message can't be edited" in description):
@@ -67,10 +89,18 @@ def install_launcher(app, db):
                 info = call('getWebhookInfo', {})
                 if info.get('url'):
                     raise RuntimeError('Un webhook Telegram est actif : arrêter l’ancien bot avant activation.')
+                identity = call('getMe', {})
+                bot_username = identity.get('username', '')
+                if not re.fullmatch(r'[A-Za-z0-9_]+', bot_username):
+                    raise RuntimeError('Le nom public du bot Telegram est introuvable.')
+                has_main_app = bool(identity.get('has_main_web_app'))
                 for scope in ('default', 'all_private_chats'):
                     for language in ('', 'fr', 'en'):
                         call('deleteMyCommands', {'scope': {'type': scope}, 'language_code': language})
                 call('setChatMenuButton', {'menu_button': {'type': 'web_app', 'text': 'Ouvrir NyxPepz', 'web_app': {'url': url}}})
+                for language in ('', 'fr', 'en'):
+                    call('setMyCommands', {'scope': {'type': 'all_group_chats'}, 'language_code': language,
+                         'commands': [{'command': 'start', 'description': 'Ouvrir NyxPepz'}]})
                 configured = True
             state = db.session.get(TelegramLauncherState, 1)
             updates = call('getUpdates', {'offset': state.offset, 'limit': 5, 'timeout': 0,
@@ -87,13 +117,20 @@ def install_launcher(app, db):
                                                         'reply_markup': keyboard})
                 elif chat.get('type') == 'private' and message.get('text'):
                     call('sendMessage', {'chat_id': chat['id'],
-                         'text': ('🌙 Bienvenue chez NyxPepz !\n\n'
-                                  '🔒 Pour votre sécurité, nous ne vous contacterons jamais en message privé '
-                                  'pour prendre une commande ou vous demander un paiement.\n\n'
-                                  '🛍️ Toutes les commandes passent exclusivement par notre application, '
-                                  'accessible via le bouton « 🌙 Ouvrir NyxPepz » ci-dessous.\n\n'
-                                  'Merci pour votre confiance 💙'),
+                         'text': WELCOME_TEXT,
                          'reply_markup': keyboard})
+                elif chat.get('type') in ('group', 'supergroup') and is_group_start(message.get('text'), bot_username):
+                    # web_app buttons are private-chat only. Telegram's main-app
+                    # link opens the app in a group; otherwise use the private bot.
+                    link = 'https://t.me/' + bot_username + ('?startapp=group' if has_main_app else '?start=group')
+                    text = WELCOME_TEXT
+                    if not has_main_app:
+                        text += '\n\nLe bouton ouvre le bot en privé : appuyez sur Démarrer, puis sur Ouvrir NyxPepz.'
+                    payload = {'chat_id': chat['id'], 'text': text,
+                               'reply_markup': {'inline_keyboard': [[{'text': '🌙 Ouvrir NyxPepz', 'url': link}]]}}
+                    if message.get('is_topic_message') and isinstance(message.get('message_thread_id'), int):
+                        payload['message_thread_id'] = message['message_thread_id']
+                    call('sendMessage', payload)
                 db.session.execute(update(TelegramLauncherState).where(TelegramLauncherState.id == 1,
                     TelegramLauncherState.owner == owner).values(offset=event['update_id'] + 1))
                 db.session.commit()
