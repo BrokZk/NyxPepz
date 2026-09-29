@@ -28,3 +28,76 @@ body{padding-bottom:132px}
  .promo-slide{height:198px;padding:20px 16px}.promo-copy{width:64%}.promo-copy h2{font-size:21px}.promo-copy p{font-size:13px}.promo-copy strong{font-size:22px}.promo-img{right:-1%;width:43%}
  .product{min-height:190px}.product .pv{height:122px;width:74px;transform:none;margin:0 auto}
 }
+
+
+/* V7.1 — animated DNA in NyxPepz welcome banner */
+.welcome{isolation:isolate}
+.welcome>div:first-child{position:relative;z-index:4}
+.welcome .dna-scene{
+ position:absolute;z-index:1;right:5px;top:-26px;width:190px;height:180px;
+ perspective:520px;pointer-events:none;opacity:.82;
+ -webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 28%,#000 82%,transparent 100%);
+ mask-image:linear-gradient(90deg,transparent 0%,#000 28%,#000 82%,transparent 100%)
+}
+.dna-helix{position:absolute;inset:0;transform-style:preserve-3d;animation:dnaFloat 6s ease-in-out infinite}
+.dna-rung{position:absolute;left:50%;top:50%;width:112px;height:3px;margin-left:-56px;border-radius:99px;
+ background:linear-gradient(90deg,#0a4fa8,#65c7ff 28%,#dff8ff 50%,#65c7ff 72%,#0a4fa8);
+ box-shadow:0 0 7px #35a8ff,0 0 17px #087aff;
+ transform-style:preserve-3d;animation:dnaSpin 16s linear infinite;
+ animation-delay:calc(var(--i) * -0.55s);
+ transform:translateY(calc((var(--i) - 7) * 10px)) rotateY(calc(var(--i) * 25deg))
+}
+.dna-rung:before,.dna-rung:after{content:"";position:absolute;top:50%;width:10px;height:10px;margin-top:-5px;border-radius:50%;
+ background:radial-gradient(circle at 35% 30%,#eaffff 0 10%,#58c4ff 30%,#0b68e8 65%,#052a6d);
+ box-shadow:0 0 8px #62c8ff,0 0 16px #087aff}
+.dna-rung:before{left:-4px}.dna-rung:after{right:-4px}
+.dna-glow{position:absolute;z-index:0;right:-30px;top:-10px;width:245px;height:170px;border-radius:50%;
+ background:radial-gradient(ellipse,#087aff2e 0%,#087aff12 42%,transparent 72%);filter:blur(8px);animation:dnaPulse 4s ease-in-out infinite}
+@keyframes dnaSpin{from{rotate:y 0deg}to{rotate:y 360deg}}
+@keyframes dnaFloat{0%,100%{transform:translateY(0) rotateZ(-8deg)}50%{transform:translateY(7px) rotateZ(-5deg)}}
+@keyframes dnaPulse{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
+@media(prefers-reduced-motion:reduce){.dna-helix,.dna-rung,.dna-glow{animation:none!important}}
+@media(max-width:520px){.welcome .dna-scene{right:-18px;top:-25px;width:165px;height:165px;opacity:.76}.dna-rung{width:96px;margin-left:-48px}}
+
+
+/* V7.2 — continuous premium cosmic header, matched to reference proportions */
+.hero-zone{
+ position:relative;isolation:isolate;margin:-27px -28px 12px;padding:0 28px 2px;overflow:hidden;
+ background:
+ radial-gradient(520px 250px at 91% 8%,rgba(19,99,255,.24),transparent 61%),
+ radial-gradient(470px 240px at 4% 63%,rgba(0,78,255,.18),transparent 66%),
+ linear-gradient(180deg,#020711 0%,#020611 48%,#02050b 100%);
+}
+.hero-zone:before,.hero-zone:after{
+ content:"";position:absolute;z-index:0;pointer-events:none;border-radius:50%;
+ width:760px;height:190px;left:-190px;border:2px solid rgba(24,111,255,.58);
+ filter:blur(5px);box-shadow:0 0 24px rgba(0,102,255,.42),0 0 55px rgba(0,78,255,.20);
+ transform:rotate(-9deg);animation:nyxWave 10s ease-in-out infinite alternate;
+}
+.hero-zone:before{top:115px}
+.hero-zone:after{top:172px;left:-80px;width:690px;height:145px;opacity:.5;animation-duration:13s;animation-direction:alternate-reverse}
+@keyframes nyxWave{from{transform:translate3d(-18px,-4px,0) rotate(-9deg) scaleX(.98)}to{transform:translate3d(28px,8px,0) rotate(-5deg) scaleX(1.05)}}
+.welcome{
+ z-index:2;min-height:150px;margin:0 -28px 0;padding:43px 28px 18px;
+ background:transparent!important;overflow:hidden;
+}
+.welcome:before{right:43px;top:29px;font-size:61px;z-index:3}
+.welcome:after{right:31px;top:94px;font-size:18px;z-index:3}
+.promo-carousel{position:relative;z-index:2;background:rgba(2,6,16,.70);backdrop-filter:blur(2px)}
+.promo-slide{height:202px;background:linear-gradient(105deg,rgba(2,6,15,.96),rgba(3,17,45,.70) 65%,rgba(2,5,12,.68))}
+.promo-img{right:4%;bottom:3%;width:31%;height:88%;object-fit:contain;filter:drop-shadow(0 12px 10px #000) drop-shadow(0 0 12px #147bff)}
+.promo-copy{width:66%}
+.promo-copy button{padding:7px 14px;font-size:14px}
+.promo-wave{opacity:.55}
+.promo-dots{position:relative;z-index:3}
+@media(max-width:520px){
+ .hero-zone{margin:-24px -14px 12px;padding:0 14px 2px}
+ .welcome{min-height:137px;margin:0 -14px;padding:35px 14px 14px}
+ .welcome h1{font-size:30px}.welcome p{font-size:17px}
+ .welcome:before{right:18px;top:25px;font-size:51px}.welcome:after{right:14px;top:81px;font-size:16px}
+ .promo-slide{height:190px;padding:18px 16px}
+ .promo-img{right:3%;width:30%;height:84%;bottom:5%}
+ .promo-copy{width:68%}.promo-copy h2{font-size:20px}.promo-copy strong{font-size:21px}
+ .hero-zone:before{top:103px;left:-280px}.hero-zone:after{top:163px;left:-175px}
+}
+@media(prefers-reduced-motion:reduce){.hero-zone:before,.hero-zone:after{animation:none}}
