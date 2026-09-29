@@ -87,7 +87,12 @@ def install_launcher(app, db):
                                                         'reply_markup': keyboard})
                 elif chat.get('type') == 'private' and message.get('text'):
                     call('sendMessage', {'chat_id': chat['id'],
-                         'text': '👋 Bienvenue sur NyxPepz !\n\nOuvrez l’application pour commander et suivre vos commandes.',
+                         'text': ('🌙 Bienvenue chez NyxPepz !\n\n'
+                                  '🔒 Pour votre sécurité, nous ne vous contacterons jamais en message privé '
+                                  'pour prendre une commande ou vous demander un paiement.\n\n'
+                                  '🛍️ Toutes les commandes passent exclusivement par notre application, '
+                                  'accessible via le bouton « 🌙 Ouvrir NyxPepz » ci-dessous.\n\n'
+                                  'Merci pour votre confiance 💙'),
                          'reply_markup': keyboard})
                 db.session.execute(update(TelegramLauncherState).where(TelegramLauncherState.id == 1,
                     TelegramLauncherState.owner == owner).values(offset=event['update_id'] + 1))
