@@ -28,9 +28,9 @@ class ReferralOrderEvent(db.Model):
  id=db.Column(db.Integer,primary_key=True);external_order_id=db.Column(db.String(128),unique=True,nullable=False);referred_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);referrer_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);credited_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 
 SEED=[
-("Retatrutide","10 mg",80,"Perte de graisse","/static/assets/reta10.webp"),("Retatrutide","15 mg",100,"Perte de graisse","/static/assets/reta15.webp"),("Retatrutide","20 mg",120,"Perte de graisse","/static/assets/reta20.webp"),("Retatrutide","30 mg",140,"Perte de graisse","/static/assets/reta30.webp"),
-("Tesamorelin","10 mg",80,"Perte de graisse",None),("Cagrilintide","10 mg",120,"Perte de graisse",None),("BPC-157","10 mg",50,"Régénération","/static/assets/bpc.webp"),("Wolverine Stack","",70,"Régénération","/static/assets/wolverine.webp"),("Semax","10 mg",50,"Régénération","/static/assets/semax.webp"),("Selank","10 mg",50,"Régénération","/static/assets/selank.webp"),
-("DSIP","5 mg",40,"Nootropiques",None),("MOTS-C","10 mg",50,"Performance",None),("KLOW Stack","80 mg",120,"Longévité",None),("GHK-Cu","50 mg",40,"Beauté · peau","/static/assets/ghk.webp"),("GLOW Stack","70 mg",100,"Beauté · peau","/static/assets/glow.webp"),("Melanotan 2","10 mg",50,"Beauté · peau","/static/assets/mt2.webp"),("Melanotan 1","10 mg",50,"Beauté · peau","/static/assets/mt1.webp"),("5-Amino","50 mg",80,"Beauté · peau",None),("PT-141","10 mg",30,"Libido",None)]
+("Retatrutide","10 mg",80,"Perte de graisse","/static/reta10.webp"),("Retatrutide","15 mg",100,"Perte de graisse","/static/reta15.webp"),("Retatrutide","20 mg",120,"Perte de graisse","/static/reta20.webp"),("Retatrutide","30 mg",140,"Perte de graisse","/static/reta30.webp"),
+("Tesamorelin","10 mg",80,"Perte de graisse",None),("Cagrilintide","10 mg",120,"Perte de graisse",None),("BPC-157","10 mg",50,"Régénération","/static/bpc.webp"),("Wolverine Stack","",70,"Régénération","/static/wolverine.webp"),("Semax","10 mg",50,"Régénération","/static/semax.webp"),("Selank","10 mg",50,"Régénération","/static/selank.webp"),
+("DSIP","5 mg",40,"Nootropiques",None),("MOTS-C","10 mg",50,"Performance",None),("KLOW Stack","80 mg",120,"Longévité",None),("GHK-Cu","50 mg",40,"Beauté · peau","/static/ghk.webp"),("GLOW Stack","70 mg",100,"Beauté · peau","/static/glow.webp"),("Melanotan 2","10 mg",50,"Beauté · peau","/static/mt2.webp"),("Melanotan 1","10 mg",50,"Beauté · peau","/static/mt1.webp"),("5-Amino","50 mg",80,"Beauté · peau",None),("PT-141","10 mg",30,"Libido",None)]
 
 def new_code():
  alphabet=string.ascii_uppercase+string.digits
@@ -189,7 +189,7 @@ with app.app_context():
  db.create_all()
  if Product.query.count()==0:
   for i,(n,f,p,c,img) in enumerate(SEED):db.session.add(Product(name=n,format=f,price=p,category=c,image_url=img,sort_order=i))
-  db.session.add(NewsItem(title="GHK-CU",subtitle="Poudre pure",image_url="/static/assets/ghk.webp",sort_order=1))
-  db.session.add(NewsItem(title="AHK-CU",subtitle="Poudre pure",image_url="/static/assets/glow.webp",sort_order=2))
+  db.session.add(NewsItem(title="GHK-CU",subtitle="Poudre pure",image_url="/static/ghk.webp",sort_order=1))
+  db.session.add(NewsItem(title="AHK-CU",subtitle="Poudre pure",image_url="/static/glow.webp",sort_order=2))
   db.session.commit()
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
