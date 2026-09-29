@@ -94,6 +94,12 @@ async function loadAdminUsers(){
         <div>
           <b>${u.name}</b>
           <small>ID Telegram : ${u.telegram_id} · ${u.points} point(s)</small>
+          <div class="admin-points">
+  <button onclick="changeAdminPoints(${u.id},-10)">−10</button>
+  <button onclick="changeAdminPoints(${u.id},-1)">−1</button>
+  <button onclick="changeAdminPoints(${u.id},1)">+1</button>
+  <button onclick="changeAdminPoints(${u.id},10)">+10</button>
+</div>
         </div>
         <button onclick="deleteAdminUser(${u.id})">🗑 Supprimer</button>
       </div>
@@ -102,7 +108,22 @@ async function loadAdminUsers(){
     console.error("Erreur utilisateurs admin :", e);
   }
 }
+async function changeAdminPoints(id,delta){
+  try{
+    await api("/api/admin/users/" + id + "/points",{
+      method:"PATCH",
+      body:JSON.stringify({delta:delta})
+    });
 
+    await loadAdminUsers();
+    await loadLeaders();
+    await loadHomeLeaders();
+
+    toast("Points mis à jour");
+  }catch(e){
+    toast(e.message || "Modification impossible");
+  }
+}
 async function deleteAdminUser(id){
   if(!confirm("Supprimer définitivement cet utilisateur ?")) return;
   try{
