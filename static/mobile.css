@@ -201,3 +201,11 @@ html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused
 .encyclopedia-viewer-toolbar strong{flex:1;font-size:12px;min-width:80px}.encyclopedia-viewer-toolbar button{background:#1c3558;border:1px solid #365a8b;color:white;border-radius:8px;min-height:40px;padding:8px 12px}
 .encyclopedia-viewer-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
 .encyclopedia-viewer-scroll img{display:block;max-width:none;height:auto;margin:0 auto}
+
+/* Extended celestial background and softer, locally served typography. */
+@font-face{font-family:NyxNunito;src:url('/static/fonts/Nunito.ttf') format('truetype');font-style:normal;font-weight:200 1000;font-display:swap}
+body{font-family:NyxNunito,'Segoe UI',sans-serif}button,input,select,textarea{font-family:inherit}
+h1,h2,h3,.welcome h1,.promo-copy h2{font-weight:750;letter-spacing:-.35px}
+.welcome .brand-word{font-family:NyxNunito,'Segoe UI',sans-serif;font-weight:650;letter-spacing:-1px}
+.bg .dna-scene{position:absolute!important;inset:0!important;width:min(708px,100%)!important;height:100%!important;margin-inline:auto;opacity:.72!important;overflow:hidden;filter:none!important;mask-image:none!important;-webkit-mask-image:none!important;pointer-events:none;z-index:1}
+.welcome>div:first-child{position:relative;z-index:2}.welcome h1,.welcome p{text-shadow:0 2px 12px #02060e}

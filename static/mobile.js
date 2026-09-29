@@ -9,6 +9,9 @@
  cap:'<path d="m2 8 10-5 10 5-10 5-10-5ZM6 10v7c4 3 8 3 12 0v-7M22 8v8"/>',
  users:'<circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3H2ZM17 3a4 4 0 0 1 0 8M19 14a6 6 0 0 1 3 5v2h-3"/>',
  chart:'<path d="M5 20V12M12 20V7M19 20V2"/>',
+ calculator:'<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M8 6h8v4H8zM8 14h1M12 14h1M16 14h.01M8 18h1M12 18h1M16 17v2"/>',
+ trend:'<path d="M3 3v18h18M6 9l5 4 4-6 6 3"/><circle cx="11" cy="13" r="1"/><circle cx="15" cy="7" r="1"/>',
+ protocol:'<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m8 11 1 1 2-2M13 11h3m-8 6 1 1 2-2M13 17h3"/>',
  home:'<path d="m3 10 9-8 9 8v11h-6v-7H9v7H3V10Z"/>',
  user:'<circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2H4Z"/>',
  star:'<path d="m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6Z"/>',
@@ -44,10 +47,10 @@
   document.addEventListener('visibilitychange',()=>backdrop.classList.toggle('is-paused',document.hidden));
  }
  const canvas=document.getElementById('dnaCanvas');if(!canvas)return;
+ const scene=canvas.closest('.dna-scene');if(backdrop&&scene)backdrop.append(scene);
  const ctx=canvas.getContext('2d');if(!ctx)return;
- let width=358,height=145,frame=0,last=0,angle=.65;
- // Continuous decorative motion is the explicitly requested app behavior.
- document.documentElement.dataset.nyxMotion='on';
+ let width=390,height=844,frame=0,last=0,angle=.65,elapsed=3;
+ const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
  const particles=Array.from({length:32},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.45+(i%4)*.25,speed:.04+(i%5)*.012,phase:i*2.1}));
  function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const dpr=Math.min(devicePixelRatio||1,2);width=r.width;height=r.height;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
  function draw(){
@@ -55,8 +58,19 @@
   // A few drifting points, painted behind the helix in the same capped loop.
   for(const p of particles){const x=(p.x*width+Math.sin(angle*.9+p.phase)*7),y=((p.y-angle*p.speed)%1+1)%1*height,alpha=.15+.3*(.5+.5*Math.sin(angle+p.phase));ctx.fillStyle=`rgba(128,190,255,${alpha})`;ctx.shadowColor='#468fff';ctx.shadowBlur=p.r> .8?7:0;ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fill();}
   ctx.shadowBlur=0;
-  const objects=[],rows=29,radius=21,step=4.3,scale=height/161;
-  function point(i,side){const a=i*.35+angle+side*Math.PI,z=Math.sin(a)*radius,x=Math.cos(a)*radius,y=(i-(rows-1)/2)*step,p=190/(190-z);return {x:width*.83+(x*.92+y*.40)*scale*p,y:height*.56+(y*.95-x*.27)*scale*p,z};}
+  // The helix extends beyond both viewport edges, with no stop behind the logo.
+  const objects=[],step=12,rows=Math.ceil((height+240)/step)+1,radius=Math.min(32,width*.075),scale=1;
+  // Sparse shooting stars share the same animation loop as the DNA and particles.
+  if(!reducedMotion.matches)for(let n=0;n<2;n++){
+   const t=(elapsed+n*6)%12;if(t>1.4)continue;
+   const progress=t/1.4,cycle=Math.floor((elapsed+n*6)/12),alpha=Math.sin(progress*Math.PI)*.7;
+   const x=width*(.96-progress*.64),y=height*(.08+((cycle+n)%3)*.15)+progress*height*.22;
+   const dx=65,dy=-28,g=ctx.createLinearGradient(x+dx,y+dy,x,y);
+   g.addColorStop(0,'rgba(110,177,255,0)');g.addColorStop(1,`rgba(192,226,255,${alpha})`);
+   ctx.beginPath();ctx.moveTo(x+dx,y+dy);ctx.lineTo(x,y);ctx.strokeStyle=g;ctx.lineWidth=1.3;ctx.stroke();
+   ctx.fillStyle=`rgba(232,246,255,${alpha})`;ctx.shadowColor='#87baff';ctx.shadowBlur=8;ctx.beginPath();ctx.arc(x,y,1.3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  }
+  function point(i,side){const a=i*.23+angle+side*Math.PI,z=Math.sin(a)*radius,x=Math.cos(a)*radius,y=-120+i*step,p=240/(240-z);return {x:width*(.86-.70*y/height)+x*p,y:y+x*.27,z};}
   const pts=Array.from({length:rows},(_,i)=>[point(i,0),point(i,1)]);
   pts.forEach((pair,i)=>{
    objects.push({type:'rung',a:pair[0],b:pair[1],z:(pair[0].z+pair[1].z)/2});
@@ -64,9 +78,8 @@
   });
   objects.sort((a,b)=>a.z-b.z);
   for(const obj of objects){
-   const depth=(obj.z+radius)/(2*radius),y=obj.p?.y??(obj.a.y+obj.b.y)/2;
-   const logoFade=Math.max(.12,Math.min(1,(y-height*.32)/(height*.3)));
-   const alpha=(.13+.57*depth)*logoFade;
+   const depth=(obj.z+radius)/(2*radius);
+   const alpha=.10+.43*depth;
    if(obj.type==='atom'){
     const {x,y}=obj.p,r=(1.7+depth*1.05)*scale;
     const g=ctx.createRadialGradient(x-r*.35,y-r*.4,r*.06,x,y,r);
@@ -80,20 +93,21 @@
   }
  }
  function tick(time){
-  frame=0;if(document.hidden)return;
+  frame=0;if(document.hidden||reducedMotion.matches)return;
   if(time-last>=33){
    const r=canvas.getBoundingClientRect();
-   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){angle+=Math.min(time-last,70)*.00065;draw();}
+   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){const dt=Math.min(time-last,70);angle+=dt*.00045;elapsed+=dt*.001;draw();}
    last=time;
   }
   frame=requestAnimationFrame(tick);
  }
- function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
+ function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden&&!reducedMotion.matches){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
  // Do not depend on intersection callbacks to restart in an embedded browser.
  if(typeof ResizeObserver==='function')new ResizeObserver(resize).observe(canvas);
  window.addEventListener('resize',resize);
  window.addEventListener('pageshow',()=>{resize();resume();});
  window.addEventListener('focus',resume);
  document.addEventListener('visibilitychange',resume);
+ reducedMotion.addEventListener?.('change',resume);
  resize();resume();
 })();
