@@ -115,3 +115,14 @@ nav button{color:#8291ac}nav button.active{color:#73afff;filter:drop-shadow(0 0 
 html[data-nyx-motion="on"] .veil-drift{animation:sapphireFloat 22s ease-in-out infinite alternate!important}
 html[data-nyx-motion="on"] .veil-drift-low{animation-duration:29s;animation-delay:-11s}
 html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused}
+/* Promotional bundles share the shop's purple-cap vial and live labels. */
+.promo-vials{position:absolute;right:0;bottom:2px;width:40%;height:165px;pointer-events:none;z-index:2}
+.promo-vials .product-photo{position:absolute;bottom:-10px;right:-7px;width:145px;height:217.5px;transform:scale(.78);transform-origin:bottom center;float:none;margin:0;overflow:visible;background:none}
+.promo-vials.multiple-vials .product-photo:first-child{left:-26px;right:auto;bottom:1px;transform:scale(.68)}
+.promo-vials.multiple-vials .product-photo:nth-child(2){right:-30px;bottom:-10px;transform:scale(.8)}
+.promo-vials.multiple-vials .product-photo:nth-child(3){right:2px;bottom:-18px;transform:scale(.7)}
+.promo-vials .branded-vial>img{display:block;width:100%;height:100%;object-fit:contain}
+@media(min-width:520px){.promo-vials{right:8px;height:195px;width:37%}.promo-vials .product-photo{transform:scale(.95)}.promo-vials.multiple-vials .product-photo:first-child{left:-10px;transform:scale(.85)}.promo-vials.multiple-vials .product-photo:nth-child(2){right:-5px;transform:scale(.98)}}
+.promo-vials .branded-vial>img{max-height:none;max-width:none;filter:none}.promo-vials .vial-name{font-size:10px}.promo-vials .vial-name.long-name{font-size:8px}
+.promo-vials .vial-name{font-size:8px;white-space:nowrap;letter-spacing:-.35px}.promo-vials .vial-name.long-name{font-size:7.3px;white-space:normal}
+@media(max-width:350px){.promo-vials.multiple-vials .product-photo:first-child{left:-43px;transform:scale(.59);bottom:4px}.promo-vials.multiple-vials .product-photo:nth-child(2){right:-30px;transform:scale(.7);bottom:-5px}}

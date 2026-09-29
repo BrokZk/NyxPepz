@@ -18,9 +18,33 @@ function renderCatalog(cat=activeCategory){activeCategory=cat;let aliases={"Beau
 $("#search").oninput=()=>renderCatalog();
 
 function escapeHTML(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function packProducts(pack){
+ const normalize=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+ function resolve(text){
+  const parts=String(text||'').replace(/^pack\s+/i,'').split('+');
+  const found=parts.map(part=>{
+   const token=normalize(part);
+   const matches=products.filter(p=>{
+    const names=[p.name];
+    if(normalize(p.name)==='retatrutide')names.push('Reta');
+    if(normalize(p.name)==='cagrilintide')names.push('Cagri');
+    return names.some(name=>{const n=normalize(name);if(!token.startsWith(n))return false;const dose=token.slice(n.length);return !dose||dose===normalize(p.format)||dose===normalize(p.format).replace(/mg/g,'');});
+   });
+   return matches.length===1?matches[0]:null;
+  });
+  return found.length<=3&&found.every(Boolean)?found:[];
+ }
+ return resolve(pack.subtitle).length?resolve(pack.subtitle):resolve(pack.title);
+}
+function packVisual(pack){
+ // Preserve a deliberately uploaded custom photo. Bundled legacy art uses
+ // the same label renderer as the shop, with catalogue-backed dosages.
+ if(pack.image_url&&!pack.image_url.startsWith('/static/'))return `<img class="promo-img" src="${escapeHTML(pack.image_url)}" alt="${escapeHTML(pack.title)}">`;
+ const items=packProducts(pack);
+ return `<div class="promo-vials ${items.length>1?'multiple-vials':''}">${(items.length?items:[{name:'NyxPepz',format:''}]).map(p=>vial({...p,image_url:null})).join('')}</div>`;
+}
 function promoSlide(x){
- let img=x.image_url?`<img class="promo-img" src="${x.image_url}" alt="">`:"";
- return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${x.title}</h2><p>${x.subtitle||""}</p><strong>${x.price?x.price+" €":"Offre à venir"}</strong><button data-go="catalog">Voir le catalogue　›</button></div>${img}<div class="promo-wave"></div></article>`
+ return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${escapeHTML(x.title)}</h2><p>${escapeHTML(x.subtitle||"")}</p><strong>${x.price?escapeHTML(x.price)+" €":"Offre à venir"}</strong><button data-go="catalog">Voir le catalogue　›</button></div>${packVisual(x)}<div class="promo-wave"></div></article>`
 }
 function setPromo(i,user=false){
  if(!packs.length)return;promoIndex=(i+packs.length)%packs.length;
