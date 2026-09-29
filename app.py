@@ -2,6 +2,11 @@ import os, hmac, hashlib, json, secrets, string
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
 import requests
+from sqlalchemy import inspect, text
+try:
+ import cloudinary.uploader
+except Exception:
+ cloudinary=None
 from flask import Flask, jsonify, request, render_template, session
 from flask_sqlalchemy import SQLAlchemy
 
@@ -17,7 +22,7 @@ db=SQLAlchemy(app)
 class User(db.Model):
  id=db.Column(db.Integer,primary_key=True);telegram_id=db.Column(db.BigInteger,unique=True,nullable=False,index=True);username=db.Column(db.String(64));first_name=db.Column(db.String(100));referral_code=db.Column(db.String(5),unique=True,nullable=False,index=True);referred_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id"));loyalty_points=db.Column(db.Integer,default=0,nullable=False);referral_points=db.Column(db.Integer,default=0,nullable=False);created_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 class Product(db.Model):
- id=db.Column(db.Integer,primary_key=True);name=db.Column(db.String(120),nullable=False);format=db.Column(db.String(80),default="");price=db.Column(db.Integer,nullable=False);category=db.Column(db.String(80),nullable=False,index=True);image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);featured=db.Column(db.Boolean,default=False,nullable=False);sort_order=db.Column(db.Integer,default=0)
+ id=db.Column(db.Integer,primary_key=True);name=db.Column(db.String(120),nullable=False);format=db.Column(db.String(80),default="");price=db.Column(db.Integer,nullable=False);category=db.Column(db.String(80),nullable=False,index=True);image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);featured=db.Column(db.Boolean,default=False,nullable=False);sort_order=db.Column(db.Integer,default=0);stock=db.Column(db.Integer,default=0,nullable=False)
 class NewsItem(db.Model):
  id=db.Column(db.Integer,primary_key=True);title=db.Column(db.String(140),nullable=False);subtitle=db.Column(db.String(200),default="");image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);sort_order=db.Column(db.Integer,default=0)
 class PromoPack(db.Model):
@@ -54,7 +59,7 @@ def current_user():return db.session.get(User,session.get("uid")) if session.get
 def is_admin(u):
  ids={x.strip() for x in os.environ.get("ADMIN_TELEGRAM_IDS","").split(",") if x.strip()}
  return bool(u and str(u.telegram_id) in ids)
-def product_json(p):return {"id":p.id,"name":p.name,"format":p.format,"price":p.price,"cat":p.category,"image_url":p.image_url,"active":p.active,"featured":p.featured,"sort_order":p.sort_order}
+def product_json(p):return {"id":p.id,"name":p.name,"format":p.format,"price":p.price,"cat":p.category,"image_url":p.image_url,"active":p.active,"featured":p.featured,"sort_order":p.sort_order,"stock":p.stock}
 def require_admin():
  u=current_user()
  return u if is_admin(u) else None
@@ -93,7 +98,7 @@ def admin_packs():
 def admin_pack_create():
  if not require_admin():return jsonify(error="Interdit"),403
  d=request.json or {}
- try:x=PromoPack(title=str(d.get("title","")).strip(),subtitle=str(d.get("subtitle","")).strip(),price=int(d.get("price",0)),image_url=(str(d.get("image_url","")).strip() or None),active=True,sort_order=int(d.get("sort_order",0)))
+ try:x=PromoPack(title=str(d.get("title","")).strip(),subtitle=str(d.get("subtitle","")).strip(),price=int(d.get("price",0)),image_url=(str(d.get("image_url","")).strip() or None),active=True,sort_order=int(d.get("sort_order",0)),stock=max(int(d.get("stock",0)),0))
  except Exception:return jsonify(error="Données pack invalides"),400
  if not x.title or x.price<0:return jsonify(error="Données pack invalides"),400
  db.session.add(x);db.session.commit();return jsonify(id=x.id),201
@@ -157,6 +162,22 @@ def parcels():
  rows=Parcel.query.filter_by(user_id=u.id).order_by(Parcel.updated_at.desc()).all()
  return jsonify([{"id":p.id,"tracking_number":p.tracking_number,"status":p.status,"checkpoint":p.last_checkpoint} for p in rows])
 
+
+@app.post("/api/admin/upload")
+def admin_upload():
+ if not require_admin():return jsonify(error="Interdit"),403
+ if "file" not in request.files:return jsonify(error="Image manquante"),400
+ f=request.files["file"]
+ if not f or not f.filename:return jsonify(error="Image manquante"),400
+ if f.mimetype not in ("image/jpeg","image/png","image/webp"):return jsonify(error="Format accepté : JPG, PNG ou WEBP"),400
+ f.seek(0,2);size=f.tell();f.seek(0)
+ if size>8*1024*1024:return jsonify(error="Image trop lourde (8 Mo max)"),400
+ if not os.environ.get("CLOUDINARY_URL") or cloudinary is None:return jsonify(error="Stockage photo non configuré"),503
+ try:
+  r=cloudinary.uploader.upload(f,folder="nyxpepz",resource_type="image",transformation=[{"quality":"auto","fetch_format":"auto"}])
+  return jsonify(url=r.get("secure_url"))
+ except Exception:return jsonify(error="Échec de l’upload"),502
+
 @app.get("/api/admin/products")
 def admin_products():
  if not require_admin():return jsonify(error="Interdit"),403
@@ -176,9 +197,10 @@ def admin_product(pid):
  if not p:return jsonify(error="Produit introuvable"),404
  if request.method=="DELETE":db.session.delete(p);db.session.commit();return jsonify(ok=True)
  d=request.json or {}
- for k,a in [("name","name"),("format","format"),("cat","category"),("image_url","image_url"),("active","active"),("featured","featured"),("sort_order","sort_order")]:
+ for k,a in [("name","name"),("format","format"),("cat","category"),("image_url","image_url"),("active","active"),("featured","featured"),("sort_order","sort_order"),("stock","stock")]:
   if k in d:setattr(p,a,d[k])
- if "price" in d:p.price=int(d["price"])
+ if "price" in d:p.price=max(int(d["price"]),0)
+ if "stock" in d:p.stock=max(int(d["stock"]),0)
  db.session.commit();return jsonify(product_json(p))
 @app.get("/api/admin/news")
 def admin_news():
@@ -217,14 +239,32 @@ def order_confirmed():
 
 with app.app_context():
  db.create_all()
+ # Lightweight migration for existing PostgreSQL database.
+ try:
+  cols={c["name"] for c in inspect(db.engine).get_columns("product")}
+  if "stock" not in cols:
+   db.session.execute(text("ALTER TABLE product ADD COLUMN stock INTEGER NOT NULL DEFAULT 0"))
+   db.session.commit()
+ except Exception:
+  db.session.rollback()
  if Product.query.count()==0:
   for i,(n,f,p,c,img) in enumerate(SEED):db.session.add(Product(name=n,format=f,price=p,category=c,image_url=img,sort_order=i))
   db.session.add(NewsItem(title="GHK-CU",subtitle="Poudre pure",image_url="/static/ghk.webp",sort_order=1))
   db.session.add(NewsItem(title="AHK-CU",subtitle="Poudre pure",image_url="/static/glow.webp",sort_order=2))
   db.session.commit()
+
+ # Upgrade the two original home pack images to transparent assets without touching custom admin images.
+ try:
+  changed=False
+  for pk in PromoPack.query.all():
+   if pk.image_url=="/static/reta10.webp": pk.image_url="/static/reta10-pack.webp";changed=True
+   elif pk.image_url=="/static/reta15.webp": pk.image_url="/static/reta15-pack.webp";changed=True
+  if changed: db.session.commit()
+ except Exception:
+  db.session.rollback()
  if PromoPack.query.count()==0:
-  db.session.add(PromoPack(title="Pack Reta 10 + GHK-CU",subtitle="Retatrutide 10 mg + GHK-CU",price=110,image_url="/static/reta10.webp",sort_order=1))
-  db.session.add(PromoPack(title="Pack Reta 15 + Cagri",subtitle="Retatrutide 15 mg + Cagrilintide",price=200,image_url="/static/reta15.webp",sort_order=2))
+  db.session.add(PromoPack(title="Pack Reta 10 + GHK-CU",subtitle="Retatrutide 10 mg + GHK-CU",price=110,image_url="/static/reta10-pack.webp",sort_order=1))
+  db.session.add(PromoPack(title="Pack Reta 15 + Cagri",subtitle="Retatrutide 15 mg + Cagrilintide",price=200,image_url="/static/reta15-pack.webp",sort_order=2))
   db.session.add(PromoPack(title="Promo NyxPepz",subtitle="Personnalise cette offre depuis l’Admin",price=0,image_url="/static/ghk.webp",sort_order=3))
   db.session.commit()
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
