@@ -65,7 +65,7 @@ function editPack(p){
 }
 async function changeProductPhoto(id,input){try{let url=await uploadPhoto(input);if(!url)return;await api("/api/admin/products/"+id,{method:"PATCH",body:JSON.stringify({image_url:url})});toast("Photo modifiée");loadAdmin();products=await api("/api/catalog");renderCatalog()}catch(e){toast(e.message)}}
 async function changePackPhoto(id,input){try{let url=await uploadPhoto(input);if(!url)return;await api("/api/admin/packs/"+id,{method:"PATCH",body:JSON.stringify({image_url:url})});toast("Photo modifiée");loadAdmin();loadPacks()}catch(e){toast(e.message)}}
-async function loadAdmin(){if(!me.is_admin)return;try{
+async function loadAdmin(){if(!me.is_admin)return;try{await loadAdminUsers();
  let ps=await api("/api/admin/products");
  $("#adminProducts").innerHTML=ps.map(p=>`<div class="admin-row admin-edit card"><div><b>${p.name}</b><small>${p.format||""} · ${p.cat} · ${p.price} € · Stock ${p.stock??0}</small></div><button onclick='editProduct(${JSON.stringify(p)})'>Modifier</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changeProductPhoto(${p.id},this)"></label><button onclick="toggleProduct(${p.id},${!p.active})">${p.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deleteProduct(${p.id})">Supprimer</button></div>`).join("");
  let pk=await api("/api/admin/packs");
@@ -86,8 +86,32 @@ go("home");boot();
 async function loadAdminUsers(){
   try{
     const users = await api("/api/admin/users");
-    console.log("UTILISATEURS ADMIN :", users);
+    const box = $("#adminUsers");
+    if(!box) return;
+
+    box.innerHTML = users.map(u => `
+      <div class="admin-row card">
+        <div>
+          <b>${u.name}</b>
+          <small>ID Telegram : ${u.telegram_id} · ${u.points} point(s)</small>
+        </div>
+        <button onclick="deleteAdminUser(${u.id})">🗑 Supprimer</button>
+      </div>
+    `).join("");
   }catch(e){
     console.error("Erreur utilisateurs admin :", e);
+  }
+}
+
+async function deleteAdminUser(id){
+  if(!confirm("Supprimer définitivement cet utilisateur ?")) return;
+  try{
+    await api("/api/admin/users/" + id, {method:"DELETE"});
+    toast("Utilisateur supprimé");
+    await loadAdminUsers();
+    await loadLeaders();
+    await loadHomeLeaders();
+  }catch(e){
+    toast(e.message || "Suppression impossible");
   }
 }
