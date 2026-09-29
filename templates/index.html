@@ -37,6 +37,10 @@
 <section id="admin" class="page inner"><p class="eyebrow">NYXPEPZ CONTROL</p><h1>Administration</h1>
 <div class="admin-panel card"><h2>Ajouter un produit</h2><div class="admin-form"><input id="aName" placeholder="Nom"><input id="aFormat" placeholder="Format / dosage"><input id="aPrice" type="number" placeholder="Prix €"><input id="aStock" type="number" min="0" placeholder="Stock"><input id="aCat" placeholder="Catégorie"><input id="aImage" placeholder="URL image (facultatif)"><label class="upload-btn">📷 Photo<input id="aFile" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="aAdd">+ Ajouter</button></div><p class="admin-note">Les produits sont enregistrés dans PostgreSQL. Photo depuis l’iPhone ou URL. Stock, prix et visibilité peuvent ensuite être modifiés depuis cette page.</p></div>
 <div id="adminProducts"></div>
+ <div class="admin-panel card">
+  <h2>Utilisateurs</h2>
+  <div id="adminUsers"></div>
+</div>
 <div class="admin-panel card"><h2>Packs & Promos</h2><div class="admin-form"><input id="pTitle" placeholder="Titre du pack"><input id="pSubtitle" placeholder="Composition / sous-titre"><input id="pPrice" type="number" placeholder="Prix €"><input id="pImage" placeholder="URL de la photo"><label class="upload-btn">📷 Photo<input id="pFile" type="file" accept="image/png,image/jpeg,image/webp"></label><input id="pOrder" type="number" placeholder="Ordre (1, 2, 3...)"><button id="pAdd">+ Ajouter le pack</button></div><p class="admin-note">Les 3 premiers packs actifs apparaissent dans le carrousel. Tu peux les masquer, supprimer ou changer leur ordre. Tu peux modifier chaque pack, sa photo, son prix, son ordre et sa visibilité directement ici.</p></div>
 <div id="adminPacks"></div>
 <div class="admin-panel card"><h2>Ajouter une nouveauté</h2><div class="admin-form"><input id="nTitle" placeholder="Titre"><input id="nSubtitle" placeholder="Sous-titre"><input id="nImage" placeholder="URL image"><label class="upload-btn">📷 Photo<input id="nFile" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="nAdd">+ Publier</button></div></div><div id="adminNews"></div></section></main>
