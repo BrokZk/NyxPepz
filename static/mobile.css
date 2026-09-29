@@ -248,3 +248,15 @@ h1,h2,h3,.welcome h1,.promo-copy h2{font-weight:750;letter-spacing:-.35px}
 .page-back{display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;padding:9px 15px;border:1px solid #385984;border-radius:12px;background:#10213acb;color:#c1d8f9;font-size:14px;font-weight:700;min-height:44px}
 .page-back:hover{background:#173456;border-color:#7baef2}
 .has-page-back #filters .category-back,.has-page-back #protocolDetail>button:first-child,.has-page-back .protocol-list-head>button:first-child,.has-page-back #encyclopediaDetail>button:first-child,.has-page-back #adminProductToolbar>button:first-child{display:none}
+
+#adminProducts .admin-product-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px;gap:9px}
+#adminProducts .admin-product-actions>button:last-child{grid-column:2/4}
+#adminProducts .admin-stock-open,#adminProducts .admin-stock-save{background:#2458b8;border:1px solid #6296f0;color:white}
+#adminProducts .admin-stock-editor{grid-column:1/-1;display:block;padding:15px;background:#091a30;border:1px solid #345d92;border-radius:13px;margin-top:4px}
+#adminProducts .admin-stock-editor label{display:block;color:#dfecff;font-size:14px;font-weight:700;margin-bottom:9px}
+#adminProducts .admin-stock-editor input{display:block;box-sizing:border-box;width:100%;min-height:48px;padding:12px;background:#050f20;border:1px solid #587aa8;border-radius:10px;color:white}
+#adminProducts .admin-stock-editor .admin-note{font-size:12px;color:#a9bfdc;margin:10px 0}
+#adminProducts .admin-stock-status{font-size:13px;line-height:1.5;color:#ffd2a5;overflow-wrap:anywhere}
+#adminProducts .admin-stock-status:empty{display:none}
+#adminProducts .admin-stock-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+#adminProducts button:disabled{opacity:.6;cursor:wait}

@@ -189,7 +189,33 @@ function renderAdminProducts(){
   const row=element('article','admin-row admin-edit card');row.dataset.adminProductId=p.id;
   const copy=element('div'),name=element('b','',`${p.name} ${p.format||''}`.trim());copy.append(name,element('small','',`${p.price} € · Stock ${p.stock??0} · ${p.active?'Visible':'Masqué'}`));
   const photo=element('label','mini-upload','📷');photo.setAttribute('aria-label','Changer la photo de '+p.name+' '+(p.format||''));const input=element('input');input.type='file';input.accept='image/png,image/jpeg,image/webp';input.onchange=()=>changeProductPhoto(p.id,input);photo.append(input);
-  row.append(copy,button('Modifier',()=>editProduct(p)),photo,button(p.active?'Masquer':'Afficher',()=>toggleProduct(p.id,!p.active)),button('Supprimer',()=>deleteProduct(p.id),'danger'));list.append(row);
+  const actions=element('div','admin-product-actions');
+  const editor=element('form','admin-stock-editor');editor.hidden=true;editor.noValidate=true;
+  const stockId='admin-stock-'+p.id,label=element('label','','Nouvelle quantité en stock'),quantity=element('input');quantity.id=stockId;quantity.type='text';quantity.inputMode='numeric';quantity.autocomplete='off';quantity.maxLength=10;quantity.value=String(p.stock??0);label.htmlFor=stockId;
+  const help=element('p','admin-note','Saisissez la quantité totale disponible, pas la quantité à ajouter.');help.id=stockId+'-help';quantity.setAttribute('aria-describedby',help.id+' '+stockId+'-status');
+  const status=element('p','admin-stock-status');status.id=stockId+'-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  const stock=button('Stock',()=>{editor.hidden=!editor.hidden;stock.setAttribute('aria-expanded',String(!editor.hidden));if(!editor.hidden){quantity.value=String(p.stock??0);status.textContent='';quantity.removeAttribute('aria-invalid');quantity.focus();quantity.select();}},'admin-stock-open');stock.setAttribute('aria-expanded','false');editor.id=stockId+'-editor';stock.setAttribute('aria-controls',editor.id);
+  const save=element('button','admin-stock-save','Enregistrer');save.type='submit';
+  const cancel=button('Annuler',()=>{editor.hidden=true;stock.setAttribute('aria-expanded','false');stock.focus();});
+  const formActions=element('div','admin-stock-actions');formActions.append(save,cancel);editor.append(label,quantity,help,status,formActions);
+  let saving=false;
+  editor.onsubmit=async event=>{
+   event.preventDefault();if(saving)return;
+   const raw=quantity.value.trim(),value=Number(raw);
+   if(!/^\d+$/.test(raw)||!Number.isSafeInteger(value)||value>2147483647){status.textContent='Indiquez un nombre entier positif ou zéro.';quantity.setAttribute('aria-invalid','true');quantity.focus();return;}
+   saving=true;quantity.removeAttribute('aria-invalid');status.textContent='Enregistrement…';save.disabled=cancel.disabled=quantity.disabled=true;actions.querySelectorAll('button,input').forEach(control=>control.disabled=true);
+   try{
+    const updated=await api('/api/admin/products/'+p.id,{method:'PATCH',body:JSON.stringify({stock:value})});
+    p.stock=updated.stock??value;const cached=adminProductItems.find(item=>item.id===p.id);if(cached)cached.stock=p.stock;
+    copy.querySelector('small').textContent=`${p.price} € · Stock ${p.stock} · ${p.active?'Visible':'Masqué'}`;
+    status.textContent='Stock enregistré.';editor.hidden=true;stock.setAttribute('aria-expanded','false');toast('Stock enregistré : '+p.stock);
+    // Refresh the storefront independently: a refresh failure must not suggest the save failed.
+    api('/api/catalog').then(items=>{products=items;renderCatalog();}).catch(()=>{});
+   }catch(error){status.textContent=error.message||'Impossible d’enregistrer le stock. Réessayez.';}
+   finally{saving=false;save.disabled=cancel.disabled=quantity.disabled=false;actions.querySelectorAll('button,input').forEach(control=>control.disabled=false);if(editor.hidden&&row.isConnected)stock.focus({preventScroll:true});}
+  };
+  actions.append(stock,button('Modifier',()=>editProduct(p)),photo,button(p.active?'Masquer':'Afficher',()=>toggleProduct(p.id,!p.active)),button('Supprimer',()=>deleteProduct(p.id),'danger'));
+  row.append(copy,actions,editor);list.append(row);
  });
 }
 $('#adminProductSearch')?.addEventListener('input',renderAdminProducts);
