@@ -2,7 +2,7 @@ const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand()}
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let activeCategory="Tous";let me={},products=[],chart,packs=[],promoIndex=0,promoTimer,promoTouchX=0;
 const toast=m=>{let t=$("#toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2200)};
 async function api(u,o={}){o.headers={"Content-Type":"application/json",...(o.headers||{})};let r=await fetch(u,o),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur");return d}
-function go(id){$$(".page").forEach(x=>x.classList.remove("active"));$("#"+id)?.classList.add("active");$$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo(0,0)}
+function go(id){$$(".page").forEach(x=>x.classList.remove("active"));$("#"+id)?.classList.add("active");$$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});if(id==="catalog"){$("#search").value="";renderCatalog("Tous")}if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo(0,0)}
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 const meta={"Perte de graisse":["◯","Un corps plus sain, une meilleure sensibilité"],"Régénération":["♧","Des tissus plus forts, une récupération accélérée"],"Beauté · peau":["♙","Un éclat naturel, une régénération visible"],"Nootropiques":["◇","Clarté, concentration et équilibre"],"Performance":["ϟ","Performance et vitalité"],"Longévité":["∞","Longévité / Anti-âge"],"Libido":["♡","Bien-être et vitalité"]};
 function vial(p){
@@ -14,7 +14,31 @@ function vial(p){
 }
 async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
 try{products=await api("/api/catalog");renderCatalog();loadHomeLeaders();loadNews();loadPacks()}catch(e){toast(e.message)}}
-function renderCatalog(cat=activeCategory){activeCategory=cat;let aliases={"Beauté · peau":"Beauté / Peau","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};let cats=["Tous",...new Set(products.map(x=>x.cat))];$("#filters").innerHTML=cats.map(c=>`<button class="${c===cat?"active":""}" data-cat="${c}">${aliases[c]||c}</button>`).join("");$("#filters").querySelectorAll("button").forEach(b=>b.onclick=()=>renderCatalog(b.dataset.cat));let q=($("#search").value||"").toLowerCase(),shown=products.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q)),groups=[...new Set(shown.map(x=>x.cat))];$("#products").innerHTML=groups.map((g,i)=>{let m=meta[g]||["◇","Produits NyxPepz"];return `<section class="category"><div class="cat-head"><div class="cat-icon">${m[0]}</div><div><h2><b>${i+1}.</b> ${aliases[g]||g}</h2><p>${m[1]}</p></div><button>Voir tout　›</button></div><div class="product-grid">${shown.filter(p=>p.cat===g).map(p=>`<article class="product">${vial(p)}<h3>${p.name}</h3><p>${p.format||"NyxPepz"}</p><strong>${p.price} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?p.stock+" en stock":"Rupture"}</small><div class="catalog-only">${p.cat}</div></article>`).join("")}</div></section>`}).join("")||'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>'}
+const categoryLabels={"Perte de graisse":"Perte de poids","Beauté · peau":"Beauté / Peau","Régénération":"Régénération / Réparation","Nootropiques":"Nootropiques","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};
+const categoryIcons={"Perte de graisse":"⚖️","Beauté · peau":"✨","Régénération":"💪","Nootropiques":"🧠","Performance":"⚡","Longévité":"🧬","Libido":"♡"};
+function renderCatalog(cat=activeCategory){
+ activeCategory=cat;
+ const q=($("#search").value||"").trim().toLowerCase();
+ const order=["Perte de graisse","Régénération","Beauté · peau","Nootropiques","Libido","Performance","Longévité"]; const cats=[...new Set(products.map(p=>p.cat))].sort((a,b)=>(order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99));
+ const landing=cat==="Tous"&&!q;
+ const filters=$("#filters"),target=$("#products");
+ filters.classList.toggle('category-menu',landing);
+ filters.classList.toggle('category-toolbar',!landing);
+ if(landing){
+  filters.innerHTML=cats.map(c=>`<button data-cat="${escapeHTML(c)}"><span class="category-menu-icon" aria-hidden="true">${categoryIcons[c]||'◇'}</span><span><b>${escapeHTML(categoryLabels[c]||c)}</b><small>${products.filter(p=>p.cat===c).length} produit${products.filter(p=>p.cat===c).length===1?"":"s"}</small></span><em aria-hidden="true">›</em></button>`).join('');
+  target.innerHTML=cats.length?'':'<p class="empty-state">Le catalogue sera bientôt disponible.</p>';
+  filters.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{renderCatalog(b.dataset.cat);scrollTo(0,0);});
+  $('#catalog .catalog-head h1').textContent='Boutique';
+  $('#catalog .catalog-head p').textContent='Choisissez une catégorie';
+  return;
+ }
+ const shown=products.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q));
+ filters.innerHTML='<button class="category-back">‹ Toutes les catégories</button>';
+ filters.querySelector('button').onclick=()=>{$('#search').value='';renderCatalog('Tous');scrollTo(0,0);};
+ $('#catalog .catalog-head h1').textContent=cat==='Tous'?'Recherche':categoryLabels[cat]||cat;
+ $('#catalog .catalog-head p').textContent=`${shown.length} produit${shown.length===1?'':'s'}${q?' trouvé'+(shown.length===1?'':'s'):''}`;
+ target.innerHTML=shown.length?`<div class="product-grid">${shown.map(p=>`<article class="product">${vial(p)}<h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.format||"NyxPepz")}</p><strong>${escapeHTML(p.price)} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?escapeHTML(p.stock)+" en stock":"Rupture"}</small><div class="catalog-only">${escapeHTML(categoryLabels[p.cat]||p.cat)}</div></article>`).join('')}</div>`:'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>';
+}
 $("#search").oninput=()=>renderCatalog();
 
 function escapeHTML(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
