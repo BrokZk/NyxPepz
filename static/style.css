@@ -176,3 +176,30 @@ body{padding-bottom:132px}
  .promo-img{right:4%;bottom:7%;width:27%;max-width:27%;height:78%}
  .promo-slide:after{right:-4%;width:40%}
 }
+
+/* V8 admin */
+.upload-btn,.mini-upload{display:flex;align-items:center;justify-content:center;border:1px solid #287cff;border-radius:11px;background:#0b2d68;color:#fff;padding:10px;font-weight:700;cursor:pointer}
+.upload-btn input,.mini-upload input{display:none}
+.admin-edit{grid-template-columns:minmax(0,1fr) auto auto auto auto}
+.mini-upload{min-width:43px}
+.stock{display:block;margin-top:3px;font-size:8px;font-weight:700}.stock.ok{color:#58d69a}.stock.out{color:#ff718d}
+@media(max-width:520px){.admin-edit{grid-template-columns:1fr 1fr 44px}.admin-edit>div{grid-column:1/-1}.admin-edit .danger{grid-column:auto}}
+
+/* V8.1 — true transparent pack assets */
+.promo-img{
+ mix-blend-mode:normal!important;
+ -webkit-mask-image:none!important;mask-image:none!important;
+ width:25%!important;max-width:25%!important;height:80%!important;
+ right:5%!important;bottom:7%!important;
+ object-fit:contain;
+ filter:drop-shadow(0 13px 10px rgba(0,0,0,.92))
+        drop-shadow(0 0 10px rgba(77,158,255,.72))
+        drop-shadow(0 0 24px rgba(12,89,255,.38))!important;
+}
+.brand-moon{width:27px!important}
+.brand-moon:before{inset:4px 1px 4px 0!important;border-right-width:5px!important}
+@media(max-width:520px){
+ .promo-img{width:24%!important;max-width:24%!important;height:76%!important;right:6%!important;bottom:9%!important}
+ .brand-moon{width:24px!important}
+ .brand-moon:before{border-right-width:4px!important}
+}
