@@ -18,6 +18,9 @@ HEADERS = ["Commande", "Créée le (UTC)", "Statut", "Telegram ID", "Pseudo Tele
 
 
 def install_delivery(app, db, User, shop):
+    from bot_launcher import install_launcher
+    launcher_tick = install_launcher(app, db)
+    shop['launcher_tick'] = launcher_tick
     Order, Outbox = shop["Order"], shop["Outbox"]
 
     def sheets_session():
@@ -173,6 +176,8 @@ def install_delivery(app, db, User, shop):
         while not stop.is_set():
             shop['expire']()
             count = run_jobs()
+            if loop:
+                launcher_tick()
             if not loop:
                 click.echo(f'{count} envois traités')
                 return

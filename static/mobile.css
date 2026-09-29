@@ -147,3 +147,48 @@ html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused
 .checkout-line{display:flex;gap:12px;justify-content:space-between;padding:10px 0;border-bottom:1px solid #6682ad22;font-size:13px}.checkout-line>span{min-width:0}.checkout-line b{overflow-wrap:anywhere}.checkout-line small{display:block;color:#93a9c8;font-size:11px;margin-top:4px}.checkout-line strong{white-space:nowrap;color:#b9d6ff;font-size:12px}.total-row{display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-top:12px;color:#b8c8e1}.grand-total{border-top:1px solid #6682ad44;padding-top:14px;color:#f1f6ff;font-size:17px}.grand-total strong{color:#a1cbff}.reward-saving{color:#9ce0c4}.delivery-summary{font-size:13px;line-height:1.7;color:#a6bddd;margin-top:20px;overflow-wrap:anywhere}.order-card>small{display:block;overflow-wrap:anywhere;color:#8ea4c3;font-size:11px}.order-card h2{margin-top:8px}.order-card p{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.order-card a,#parcelExternalLink{display:inline-block;color:#91beff;font-size:13px;line-height:1.5;margin-top:8px;min-height:44px}.order-actions{display:flex;flex-wrap:wrap;gap:8px}.profile-links{display:grid;gap:4px;margin-top:15px}
 .loyal[role=button]{cursor:pointer}.loyal[role=button]:focus-visible{outline:2px solid #85c5ff;outline-offset:4px}#loyaltyBalance{font-size:27px;color:#8fbeff}.reward-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}.reward-tier{padding:17px 12px;border-radius:16px;background:#0b1525;border:1px solid #5b729b40;display:flex;flex-direction:column;gap:8px}.reward-tier b{font-size:12px;color:#a8bcda}.reward-tier strong{font-size:25px;color:#91baff}.reward-tier small{font-size:10px;color:#91a6c6}.reward-tier.unlocked{border-color:#548fea9c;background:linear-gradient(135deg,#132951,#111a31)}#loyalty h2{font-size:17px}.payment-evidence{font-family:monospace;font-size:11px!important;overflow-wrap:anywhere;padding:10px;background:#080f1e;border-radius:10px}#adminShopOrders .order-card{border-top:1px solid #526b9644;padding-inline:0}
 @media(max-width:350px){.checkout-form,.order-card{padding:14px}.checkout-fields{grid-template-columns:1fr}.full-field{grid-column:1}.cart-item{padding:12px}.cart-item h2{font-size:14px}}
+
+/* Packs share the same inventory as individual products. */
+.pack-card-visual{position:relative;height:170px;width:100%;overflow:hidden}
+.pack-card-visual .promo-vials{position:relative;inset:auto;width:100%;height:100%;transform:none;display:flex;align-items:center;justify-content:center}
+.pack-card-visual .product-photo{max-width:50%;height:165px;margin:0}
+.pack-card-visual .promo-img{position:static;width:100%;height:165px;object-fit:contain}
+.selected-pack{outline:2px solid #5b9bff;outline-offset:2px}
+.order-filters{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.order-filters button{padding:10px 12px;border:1px solid #304767;border-radius:12px;background:#101e33;color:#c6d7f2}
+.order-filters button[aria-pressed="true"]{background:#2355be;color:white;border-color:#638ded}
+.product[data-pack-id]{grid-column:1/-1}
+.pack-card-visual .promo-vials .product-photo,.pack-card-visual .promo-vials.multiple-vials .product-photo{position:relative;inset:auto;transform:none;width:115px;max-width:50%;height:170px;display:flex;align-items:center;justify-content:center}
+.pack-card-visual .branded-vial{transform:scale(.72);transform-origin:center}
+@media(min-width:600px){.product[data-pack-id]{grid-column:auto}}
+
+.calculator-intro{color:var(--muted);line-height:1.6;margin-bottom:22px}
+.calculator-card,.calculator-notice{padding:20px;margin-bottom:18px}
+.calculator-card h2,.calculator-notice h2{font-size:18px;margin:0 0 18px}
+.calculator-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.calculator-fields label,.calculator-capacity{font-size:12px;color:#b3c7e4;display:block;line-height:1.5}
+.calculator-fields .full-field{grid-column:1/-1}
+.calculator-fields input,.calculator-capacity select{display:block;width:100%;box-sizing:border-box;margin-top:7px;padding:12px;background:#071020;color:white;border:1px solid #30425f;border-radius:11px;font:inherit;font-size:16px;min-width:0}
+.calculator-segments{display:flex;gap:5px;background:#071020;border:1px solid #30425f;padding:4px;border-radius:12px;margin:12px 0}
+.calculator-segments button{flex:1;min-width:0;border:0;background:transparent;color:#a9c1e5;padding:10px 4px;border-radius:8px;font-size:13px}
+.calculator-segments button[aria-pressed="true"]{background:#2557bd;color:white}
+.calculator-segments small{display:block;font-size:10px;margin-top:5px}
+.calculator-label{font-size:13px;margin-top:22px;color:#bdd1ef}
+.calculator-help,.calculator-notice p,.calculator-notice summary{font-size:12px;line-height:1.7;color:#aabedb}
+.calculator-capacity{margin:18px 0}
+.conversion-result{padding:18px;border:1px solid #4078d5;background:#102447;border-radius:14px;margin:18px 0;overflow-wrap:anywhere}
+.conversion-result>strong{display:block;font-size:30px;margin:10px 0;color:#9fc7ff}
+.conversion-result>small{font-size:11px;line-height:1.6;color:#bbcfef}
+.conversion-result p{font-size:12px;line-height:1.7}.conversion-mark{font-size:14px;line-height:1.6}
+.calculator-card button:focus-visible,.calculator-card input:focus-visible,.calculator-card select:focus-visible{outline:2px solid #8ebaff;outline-offset:2px}
+
+.encyclopedia-search{display:block;font-size:12px;color:#afc3e1}.encyclopedia-search input{display:block;box-sizing:border-box;width:100%;margin-top:8px;background:#071020;color:white;border:1px solid #30425f;border-radius:12px;padding:14px;font-size:16px}
+.encyclopedia-card{padding:18px;margin:14px 0}.encyclopedia-card h2{font-size:18px;margin:0 0 8px}.encyclopedia-card p{color:#acc1df;font-size:13px;line-height:1.6}.encyclopedia-document{display:block;text-align:center;text-decoration:none;margin:18px 0}
+#encyclopediaDetail h2{font-size:24px;margin:20px 0}#encyclopediaDetail .card{margin:16px 0;line-height:1.7}
+.encyclopedia-original{display:block;width:100%;height:auto;border-radius:14px;border:1px solid #324969}
+.encyclopedia-viewer{box-sizing:border-box;position:fixed;inset:0;margin:0;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;background:#040b15;color:#dce9ff;border:0;padding:0;z-index:9999}
+.encyclopedia-viewer[open]{display:flex;flex-direction:column}.encyclopedia-viewer::backdrop{background:#02060eea}
+.encyclopedia-viewer-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px;padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid #253b5b;background:#0b1628;flex-shrink:0}
+.encyclopedia-viewer-toolbar strong{flex:1;font-size:12px;min-width:80px}.encyclopedia-viewer-toolbar button{background:#1c3558;border:1px solid #365a8b;color:white;border-radius:8px;min-height:40px;padding:8px 12px}
+.encyclopedia-viewer-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
+.encyclopedia-viewer-scroll img{display:block;max-width:none;height:auto;margin:0 auto}

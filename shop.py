@@ -15,6 +15,7 @@ from urllib.parse import urlencode, unquote, urlparse
 import click
 import requests
 from flask import jsonify, request
+from shop_packs import inventory_lines
 from sqlalchemy import update, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -27,7 +28,7 @@ STATUSES = {"awaiting_payment": "En attente de paiement", "payment_review": "Pai
 
 
 def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent,
-                 current_user, require_admin):
+                 current_user, require_admin, packs=None):
     class ShopOrder(db.Model):
         id = db.Column(db.Integer, primary_key=True)
         reference = db.Column(db.String(40), unique=True, nullable=False)
@@ -179,14 +180,22 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         for item in requested:
             if not isinstance(item, dict):
                 raise ValueError("Article invalide")
-            pid, qty = item.get("product_id"), item.get("quantity")
-            if type(pid) is not int or type(qty) is not int or pid < 1 or not 1 <= qty <= 99 or pid in quantities:
+            kind = 'pack_id' if 'pack_id' in item else 'product_id'
+            if 'pack_id' in item and 'product_id' in item:
+                raise ValueError("Article ambigu")
+            pid, qty = item.get(kind), item.get("quantity")
+            if type(pid) is not int or type(qty) is not int or pid < 1 or not 1 <= qty <= 99 or (kind, pid) in quantities:
                 raise ValueError("Quantité ou article invalide")
-            quantities[pid] = qty
+            quantities[(kind, pid)] = qty
         lines = []
-        for pid in sorted(quantities):
+        for kind, pid in sorted(quantities):
+            qty = quantities[(kind, pid)]
+            if kind == 'pack_id':
+                if not packs:
+                    raise ValueError('Pack indisponible')
+                lines.append(packs['line'](pid, qty))
+                continue
             product = db.session.get(Product, pid)
-            qty = quantities[pid]
             if not product or not product.active or product.stock < qty:
                 raise ValueError("Un produit n’est plus disponible dans la quantité demandée")
             if type(product.price) is not int or not 0 < product.price <= 100000:
@@ -194,6 +203,10 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             lines.append({"product_id": pid, "name": product.name, "format": product.format,
                           "quantity": qty, "unit_cents": product.price * 100,
                           "line_cents": product.price * 100 * qty})
+        for part in inventory_lines(lines):
+            product = db.session.get(Product, part['product_id'])
+            if not product or not product.active or product.stock < part['quantity']:
+                raise ValueError('Stock insuffisant pour les produits et packs réunis')
         subtotal = sum(x["line_cents"] for x in lines)
         if subtotal > 10000000:
             raise ValueError("Montant de commande trop élevé")
@@ -231,7 +244,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 status=status, stock_reserved=False), execution_options={"synchronize_session": False}).rowcount
         if not changed:
             return False
-        for line in order.lines:
+        for line in inventory_lines(order.lines):
             db.session.execute(update(Product).where(Product.id == line["product_id"]).values(stock=Product.stock + line["quantity"]))
         if order.reward_reserved:
             db.session.execute(update(User).where(User.id == order.user_id).values(loyalty_points=User.loyalty_points + order.reward_points))
@@ -312,9 +325,12 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 if user.referred_by_user_id not in (None, referrer.id):
                     return fail("Un parrain est déjà associé à votre compte")
                 user.referred_by_user_id = referrer.id
-            for line in computed["lines"]:
-                changed = db.session.execute(update(Product).where(Product.id == line["product_id"], Product.active == True,
-                    Product.price * 100 == line["unit_cents"], Product.stock >= line["quantity"]).values(
+            prices = {x['product_id']: x['unit_cents'] for x in computed['lines'] if 'product_id' in x}
+            for line in inventory_lines(computed["lines"]):
+                conditions = [Product.id == line['product_id'], Product.active == True, Product.stock >= line['quantity']]
+                if line['product_id'] in prices:
+                    conditions.append(Product.price * 100 == prices[line['product_id']])
+                changed = db.session.execute(update(Product).where(*conditions).values(
                         stock=Product.stock - line["quantity"])).rowcount
                 if changed != 1:
                     return fail("Le stock ou le prix vient de changer. Vérifiez votre panier.", 409)
@@ -506,7 +522,22 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
     def admin_orders():
         if not require_admin():
             return fail("Interdit", 403)
-        return jsonify([serialize(o, True) for o in ShopOrder.query.order_by(ShopOrder.id.desc()).limit(200)])
+        groups = {'action': ('awaiting_payment', 'payment_review', 'paid'),
+                  'shipping': ('shipped', 'available'), 'history': ('delivered', 'cancelled', 'expired')}
+        group = request.args.get('group')
+        query = ShopOrder.query
+        if group is not None:
+            if group not in groups:
+                return fail('Filtre invalide')
+            query = query.filter(ShopOrder.status.in_(groups[group]))
+        before = request.args.get('before', type=int)
+        if before:
+            query = query.filter(ShopOrder.id < before)
+        orders = query.order_by(ShopOrder.id.desc()).limit(51 if group else 200).all()
+        if group:
+            return jsonify(orders=[serialize(o, True) for o in orders[:50]],
+                           next_before=orders[49].id if len(orders) > 50 else None)
+        return jsonify([serialize(o, True) for o in orders])
 
     @app.post("/api/shop/admin/orders/<reference>/confirm-payment")
     def confirm_payment(reference):
@@ -531,7 +562,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 return fail("Aucun paiement à vérifier pour cette commande", 409)
             db.session.refresh(order)
             if not order.stock_reserved:
-                for line in order.lines:
+                for line in inventory_lines(order.lines):
                     changed = db.session.execute(update(Product).where(Product.id == line["product_id"], Product.stock >= line["quantity"]).values(stock=Product.stock - line["quantity"])).rowcount
                     if changed != 1:
                         return fail("Paiement tardif : stock insuffisant, traitement manuel nécessaire", 409)
