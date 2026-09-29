@@ -45,6 +45,10 @@ class ConfirmedOrderEvent(db.Model):
  loyalty_points=db.Column(db.Integer,nullable=False)
  processed_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc),nullable=False)
 
+class CatalogUpdate(db.Model):
+ # A durable marker prevents a future restart from overwriting Admin edits.
+ key=db.Column(db.String(100),primary_key=True)
+
 def database_failure():
  db.session.rollback()
  app.logger.exception("Échec de la transaction de points/parrainage")
@@ -484,4 +488,37 @@ with app.app_context():
   db.session.add(PromoPack(title="Pack Reta 15 + Cagri",subtitle="Retatrutide 15 mg + Cagrilintide",price=200,image_url="/static/reta15-pack.webp",sort_order=2))
   db.session.add(PromoPack(title="Promo NyxPepz",subtitle="Personnalise cette offre depuis l’Admin",price=0,image_url="/static/ghk.webp",sort_order=3))
   db.session.commit()
+def apply_mobile_catalog_update():
+ key="2026-09-29-wolverine-ahk-mobile-v1"
+ if db.session.get(CatalogUpdate,key):return False
+ try:
+  db.session.add(CatalogUpdate(key=key))
+  db.session.flush()
+  products=Product.query.all()
+  def normalized(name):return "".join(c for c in (name or "").lower() if c.isalnum())
+  for product in products:
+   if normalized(product.name) in ("wolverine","wolverinestack"):
+    product.format="10 mg / 10 mg"
+    product.price=100
+  matches=[p for p in products if normalized(p.name)=="ahkcu"]
+  if matches:
+   for product in matches:
+    product.format="100 mg"
+    product.price=60
+  else:
+   db.session.add(Product(name="AHK-CU",format="100 mg",price=60,
+    category="Beauté · peau",sort_order=100,stock=0,active=True))
+  db.session.commit()
+  return True
+ except IntegrityError:
+  db.session.rollback()
+  if db.session.get(CatalogUpdate,key):return False
+  raise
+ except SQLAlchemyError:
+  db.session.rollback()
+  raise
+
+with app.app_context():
+ apply_mobile_catalog_update()
+
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))

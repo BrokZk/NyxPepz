@@ -1,16 +1,23 @@
 const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand()}
-const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let me={},products=[],chart,packs=[],promoIndex=0,promoTimer,promoTouchX=0;
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let activeCategory="Tous";let me={},products=[],chart,packs=[],promoIndex=0,promoTimer,promoTouchX=0;
 const toast=m=>{let t=$("#toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2200)};
 async function api(u,o={}){o.headers={"Content-Type":"application/json",...(o.headers||{})};let r=await fetch(u,o),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur");return d}
-function go(id){$$(".page").forEach(x=>x.classList.remove("active"));$("#"+id)?.classList.add("active");$$("nav button").forEach(x=>x.classList.toggle("active",x.dataset.go===id));if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo(0,0)}
+function go(id){$$(".page").forEach(x=>x.classList.remove("active"));$("#"+id)?.classList.add("active");$$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo(0,0)}
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 const meta={"Perte de graisse":["◯","Un corps plus sain, une meilleure sensibilité"],"Régénération":["♧","Des tissus plus forts, une récupération accélérée"],"Beauté · peau":["♙","Un éclat naturel, une régénération visible"],"Nootropiques":["◇","Clarté, concentration et équilibre"],"Performance":["ϟ","Performance et vitalité"],"Longévité":["∞","Longévité / Anti-âge"],"Libido":["♡","Bien-être et vitalité"]};
-function vial(p){if(p.image_url)return `<div class="product-photo"><img src="${p.image_url}" alt="${p.name}"></div>`;let tone=p.cat.includes("Beauté")?"violet":"blue";return `<div class="pv ${tone}"><div class="pv-cap"></div><div class="pv-neck"></div><div class="pv-body"><div class="pv-label"><span>☾</span><b>NyxPepz</b><small>${p.name}</small><em>${p.format||"PREMIUM"}</em></div></div></div>`}
+function vial(p){
+ // Custom photos uploaded in Admin remain available. Replace the original
+ // bundled catalogue artwork and missing photos with the new label template.
+ if(p.image_url&&!p.image_url.startsWith("/static/"))return `<div class="product-photo"><img loading="lazy" src="${escapeHTML(p.image_url)}" alt="${escapeHTML(p.name)}"></div>`;
+ const name=String(p.name||"NyxPepz").toUpperCase(),dose=String(p.format||"").trim();
+ return `<div class="product-photo branded-photo"><div class="branded-vial" role="img" aria-label="Visuel ${escapeHTML(p.name)} ${escapeHTML(dose)}"><img loading="lazy" src="/static/nyx-vial.png" alt="" width="1024" height="1536"><div class="vial-print" aria-hidden="true"><span class="vial-brand"><b>Nyx</b>Pepz</span><span class="vial-rule"></span><span class="vial-name ${name.length>11?'long-name':''}">${escapeHTML(name)}</span>${dose?`<span class="vial-dose ${dose.length>10?'long-dose':''}">${escapeHTML(dose)}</span>`:''}<span class="vial-bottom-rule"></span></div></div></div>`
+}
 async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
 try{products=await api("/api/catalog");renderCatalog();loadHomeLeaders();loadNews();loadPacks()}catch(e){toast(e.message)}}
-function renderCatalog(cat="Tous"){let aliases={"Beauté · peau":"Beauté / Peau","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};let cats=["Tous",...new Set(products.map(x=>x.cat))];$("#filters").innerHTML=cats.map(c=>`<button class="${c===cat?"active":""}" data-cat="${c}">${aliases[c]||c}</button>`).join("");$("#filters").querySelectorAll("button").forEach(b=>b.onclick=()=>renderCatalog(b.dataset.cat));let q=($("#search").value||"").toLowerCase(),shown=products.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q)),groups=[...new Set(shown.map(x=>x.cat))];$("#products").innerHTML=groups.map((g,i)=>{let m=meta[g]||["◇","Produits NyxPepz"];return `<section class="category"><div class="cat-head"><div class="cat-icon">${m[0]}</div><div><h2><b>${i+1}.</b> ${aliases[g]||g}</h2><p>${m[1]}</p></div><button>Voir tout　›</button></div><div class="product-grid">${shown.filter(p=>p.cat===g).map(p=>`<article class="product">${vial(p)}<h3>${p.name}</h3><p>${p.format||"NyxPepz"}</p><strong>${p.price} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?p.stock+" en stock":"Rupture"}</small><div class="catalog-only">Voir la fiche</div></article>`).join("")}</div></section>`}).join("")}
+function renderCatalog(cat=activeCategory){activeCategory=cat;let aliases={"Beauté · peau":"Beauté / Peau","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};let cats=["Tous",...new Set(products.map(x=>x.cat))];$("#filters").innerHTML=cats.map(c=>`<button class="${c===cat?"active":""}" data-cat="${c}">${aliases[c]||c}</button>`).join("");$("#filters").querySelectorAll("button").forEach(b=>b.onclick=()=>renderCatalog(b.dataset.cat));let q=($("#search").value||"").toLowerCase(),shown=products.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q)),groups=[...new Set(shown.map(x=>x.cat))];$("#products").innerHTML=groups.map((g,i)=>{let m=meta[g]||["◇","Produits NyxPepz"];return `<section class="category"><div class="cat-head"><div class="cat-icon">${m[0]}</div><div><h2><b>${i+1}.</b> ${aliases[g]||g}</h2><p>${m[1]}</p></div><button>Voir tout　›</button></div><div class="product-grid">${shown.filter(p=>p.cat===g).map(p=>`<article class="product">${vial(p)}<h3>${p.name}</h3><p>${p.format||"NyxPepz"}</p><strong>${p.price} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?p.stock+" en stock":"Rupture"}</small><div class="catalog-only">${p.cat}</div></article>`).join("")}</div></section>`}).join("")||'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>'}
 $("#search").oninput=()=>renderCatalog();
 
+function escapeHTML(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function promoSlide(x){
  let img=x.image_url?`<img class="promo-img" src="${x.image_url}" alt="">`:"";
  return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${x.title}</h2><p>${x.subtitle||""}</p><strong>${x.price?x.price+" €":"Offre à venir"}</strong><button data-go="catalog">Voir le catalogue　›</button></div>${img}<div class="promo-wave"></div></article>`
@@ -21,10 +28,11 @@ function setPromo(i,user=false){
  $$("#promoDots button").forEach((b,k)=>b.classList.toggle("active",k===promoIndex));
  if(user)restartPromo();
 }
-function restartPromo(){clearInterval(promoTimer);if(packs.length>1)promoTimer=setInterval(()=>setPromo(promoIndex+1),5200)}
+function restartPromo(){clearInterval(promoTimer);if(packs.length>1&&!document.hidden&&!matchMedia("(prefers-reduced-motion: reduce)").matches)promoTimer=setInterval(()=>setPromo(promoIndex+1),5200)}
 async function loadPacks(){
  try{packs=await api("/api/packs")}catch{packs=[]}
- if(!packs.length)packs=[{title:"Pack Reta 10 + GHK-CU",subtitle:"Retatrutide 10 mg + GHK-CU",price:110,image_url:"/static/reta10-pack.webp"},{title:"Pack Reta 15 + Cagri",subtitle:"Retatrutide 15 mg + Cagrilintide",price:200,image_url:"/static/reta15-pack.webp"}];
+ if(!packs.length){clearInterval(promoTimer);$("#promoTrack").innerHTML='<article class="promo-slide"><div class="promo-copy"><small>NYXPEPZ</small><h2>Découvrez le catalogue</h2><p>Retrouvez tous nos produits.</p><button data-go="catalog">Voir le catalogue　›</button></div></article>';$("#promoDots").innerHTML="";$("#promoTrack button").onclick=()=>go("catalog");return}
+
  $("#promoTrack").innerHTML=packs.map(promoSlide).join("");
  $("#promoDots").innerHTML=packs.map((_,i)=>`<button aria-label="Promo ${i+1}" class="${i===0?"active":""}"></button>`).join("");
  $$("#promoDots button").forEach((b,i)=>b.onclick=()=>setPromo(i,true));
@@ -33,9 +41,9 @@ async function loadPacks(){
  restartPromo()
 }
 
-async function loadNews(){try{let a=await api("/api/news");$("#newsList").innerHTML=(a.length?a:[{title:"GHK-CU",subtitle:"Poudre pure",image_url:"/static/ghk.webp"},{title:"AHK-CU",subtitle:"Poudre pure",image_url:"/static/glow.webp"}]).slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
+async function loadNews(){try{let a=await api("/api/news");$("#newsList").innerHTML=a.slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" loading="lazy" alt="${escapeHTML(n.title)}" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
 async function loadLeaders(){try{let a=await api("/api/leaderboard");$("#leaders").innerHTML=a.map((x,i)=>`<div class="leader"><span>${i+1}. ${x.name}</span><b>${x.points} pts</b></div>`).join("")||"Aucun classement."}catch(e){toast(e.message)}}
-async function loadHomeLeaders(){try{let a=(await api("/api/leaderboard")).slice(0,3);$("#homeLeaders").innerHTML=a.map((x,i)=>`<div><b>${["🥇","🥈","🥉"][i]} ${x.name}</b><span>${x.points} points</span></div>`).join("")}catch(e){console.error(e)}}
+async function loadHomeLeaders(){try{let a=(await api("/api/leaderboard")).slice(0,3);$("#homeLeaders").innerHTML=a.map((x,i)=>`<div class="podium-member"><span class="podium-medal" aria-label="Place ${i+1}">${["🥇","🥈","🥉"][i]}</span><b>${escapeHTML(x.name)}</b><span class="podium-points">${Number(x.points)||0} points</span></div>`).join("")||'<p class="empty-state">Le classement apparaîtra avec les premiers membres.</p>'}catch(e){$("#homeLeaders").innerHTML='<p class="empty-state">Classement momentanément indisponible.</p>'}}
 $("#copyCode").onclick=async()=>{try{await navigator.clipboard.writeText(me.referral_code);toast("Code copié")}catch{toast(me.referral_code||"Code indisponible")}};
 $("#applyReferral").onclick=async()=>{try{await api("/api/referral/apply",{method:"POST",body:JSON.stringify({code:$("#applyCode").value})});toast("Parrain enregistré")}catch(e){toast(e.message)}};
 async function loadWeights(){try{let a=await api("/api/weights");chart?.destroy();chart=new Chart($("#weightChart"),{type:"line",data:{labels:a.map(x=>new Date(x.date).toLocaleDateString("fr-FR")),datasets:[{label:"Poids (kg)",data:a.map(x=>x.weight),tension:.35}]},options:{responsive:true,maintainAspectRatio:false}})}catch(e){toast(e.message)}}
@@ -136,3 +144,5 @@ async function deleteAdminUser(id){
     toast(e.message || "Suppression impossible");
   }
 }
+
+document.addEventListener("visibilitychange",restartPromo);
