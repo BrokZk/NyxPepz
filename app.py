@@ -20,6 +20,8 @@ class Product(db.Model):
  id=db.Column(db.Integer,primary_key=True);name=db.Column(db.String(120),nullable=False);format=db.Column(db.String(80),default="");price=db.Column(db.Integer,nullable=False);category=db.Column(db.String(80),nullable=False,index=True);image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);featured=db.Column(db.Boolean,default=False,nullable=False);sort_order=db.Column(db.Integer,default=0)
 class NewsItem(db.Model):
  id=db.Column(db.Integer,primary_key=True);title=db.Column(db.String(140),nullable=False);subtitle=db.Column(db.String(200),default="");image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);sort_order=db.Column(db.Integer,default=0)
+class PromoPack(db.Model):
+ id=db.Column(db.Integer,primary_key=True);title=db.Column(db.String(140),nullable=False);subtitle=db.Column(db.String(220),default="");price=db.Column(db.Integer,nullable=False);image_url=db.Column(db.Text);active=db.Column(db.Boolean,default=True,nullable=False);sort_order=db.Column(db.Integer,default=0)
 class WeightEntry(db.Model):
  id=db.Column(db.Integer,primary_key=True);user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False,index=True);weight_kg=db.Column(db.Float,nullable=False);created_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 class Parcel(db.Model):
@@ -79,6 +81,34 @@ def me():
 def catalog():return jsonify([product_json(p) for p in Product.query.filter_by(active=True).order_by(Product.category,Product.sort_order,Product.id).all()])
 @app.get("/api/news")
 def news():return jsonify([{"id":n.id,"title":n.title,"subtitle":n.subtitle,"image_url":n.image_url} for n in NewsItem.query.filter_by(active=True).order_by(NewsItem.sort_order,NewsItem.id).all()])
+@app.get("/api/packs")
+def packs():
+ return jsonify([{"id":x.id,"title":x.title,"subtitle":x.subtitle,"price":x.price,"image_url":x.image_url} for x in PromoPack.query.filter_by(active=True).order_by(PromoPack.sort_order,PromoPack.id).limit(3).all()])
+
+@app.get("/api/admin/packs")
+def admin_packs():
+ if not require_admin():return jsonify(error="Interdit"),403
+ return jsonify([{"id":x.id,"title":x.title,"subtitle":x.subtitle,"price":x.price,"image_url":x.image_url,"active":x.active,"sort_order":x.sort_order} for x in PromoPack.query.order_by(PromoPack.sort_order,PromoPack.id).all()])
+@app.post("/api/admin/packs")
+def admin_pack_create():
+ if not require_admin():return jsonify(error="Interdit"),403
+ d=request.json or {}
+ try:x=PromoPack(title=str(d.get("title","")).strip(),subtitle=str(d.get("subtitle","")).strip(),price=int(d.get("price",0)),image_url=(str(d.get("image_url","")).strip() or None),active=True,sort_order=int(d.get("sort_order",0)))
+ except Exception:return jsonify(error="Données pack invalides"),400
+ if not x.title or x.price<0:return jsonify(error="Données pack invalides"),400
+ db.session.add(x);db.session.commit();return jsonify(id=x.id),201
+@app.route("/api/admin/packs/<int:pid>",methods=["PATCH","DELETE"])
+def admin_pack_item(pid):
+ if not require_admin():return jsonify(error="Interdit"),403
+ x=db.session.get(PromoPack,pid)
+ if not x:return jsonify(error="Pack introuvable"),404
+ if request.method=="DELETE":db.session.delete(x);db.session.commit();return jsonify(ok=True)
+ d=request.json or {}
+ for k in ("title","subtitle","image_url","active","sort_order"):
+  if k in d:setattr(x,k,d[k])
+ if "price" in d:x.price=int(d["price"])
+ db.session.commit();return jsonify(ok=True)
+
 @app.get("/api/leaderboard")
 def leaderboard():
  rows=User.query.order_by(User.loyalty_points.desc()).limit(20).all()
@@ -191,5 +221,10 @@ with app.app_context():
   for i,(n,f,p,c,img) in enumerate(SEED):db.session.add(Product(name=n,format=f,price=p,category=c,image_url=img,sort_order=i))
   db.session.add(NewsItem(title="GHK-CU",subtitle="Poudre pure",image_url="/static/ghk.webp",sort_order=1))
   db.session.add(NewsItem(title="AHK-CU",subtitle="Poudre pure",image_url="/static/glow.webp",sort_order=2))
+  db.session.commit()
+ if PromoPack.query.count()==0:
+  db.session.add(PromoPack(title="Pack Reta 10 + GHK-CU",subtitle="Retatrutide 10 mg + GHK-CU",price=110,image_url="/static/reta10.webp",sort_order=1))
+  db.session.add(PromoPack(title="Pack Reta 15 + Cagri",subtitle="Retatrutide 15 mg + Cagrilintide",price=200,image_url="/static/reta15.webp",sort_order=2))
+  db.session.add(PromoPack(title="Promo NyxPepz",subtitle="Personnalise cette offre depuis l’Admin",price=0,image_url="/static/ghk.webp",sort_order=3))
   db.session.commit()
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
