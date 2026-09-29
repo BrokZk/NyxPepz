@@ -134,6 +134,35 @@ def admin_users():
         }
         for u in users
     ])
+@app.patch("/api/admin/users/<int:uid>/points")
+def admin_update_user_points(uid):
+    if not require_admin():
+        return jsonify(error="Interdit"), 403
+
+    u = db.session.get(User, uid)
+    if not u:
+        return jsonify(error="Utilisateur introuvable"), 404
+
+    data = request.json or {}
+
+    try:
+        delta = int(data.get("delta", 0))
+    except (TypeError, ValueError):
+        return jsonify(error="Valeur invalide"), 400
+
+    if delta not in (-10, -1, 1, 10):
+        return jsonify(error="Modification invalide"), 400
+
+    u.loyalty_points = max(0, (u.loyalty_points or 0) + delta)
+
+    db.session.commit()
+
+    return jsonify(
+        ok=True,
+        id=u.id,
+        points=u.loyalty_points
+    )
+
 
 @app.delete("/api/admin/users/<int:uid>")
 def admin_delete_user(uid):
