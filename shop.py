@@ -523,7 +523,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if not require_admin():
             return fail("Interdit", 403)
         groups = {'action': ('awaiting_payment', 'payment_review', 'paid'),
-                  'shipping': ('shipped', 'available'), 'history': ('delivered', 'cancelled', 'expired')}
+                  'shipping': ('shipped', 'available'), 'history': ('paid', 'shipped', 'available', 'delivered')}
         group = request.args.get('group')
         query = ShopOrder.query
         if group is not None:
