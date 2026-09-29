@@ -1,7 +1,7 @@
 <!doctype html><html lang="fr"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#02050b"><title>NyxPepz</title>
-<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=7">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head><body>
 <div class="bg"></div>
@@ -9,8 +9,8 @@
 <main>
 <section id="home" class="page active">
  <div class="welcome"><div><h1>Salut <span id="hello">Nyx</span> 👋</h1><p>Bienvenue chez NyxPepz</p></div><div class="brand">NyxPepz<span>☾</span></div></div>
- <article class="hero"><div class="hero-copy"><small>NOUVEAUTÉ</small><h2>Coffrets GHK / AHK</h2><p>Spray · Sérum · Roll-on</p><button data-go="catalog">Voir les produits　›</button></div><img class="hero-asset" src="/static/hero-bottles.webp" alt=""></article>
- <div class="dots"><b></b><i></i><i></i></div>
+ <div class="promo-carousel" id="promoCarousel"><div id="promoTrack" class="promo-track"></div></div>
+ <div id="promoDots" class="dots promo-dots"></div>
  <article class="loyal card"><div class="star">★</div><div><p>Mes points fidélité</p><strong><span id="points">0</span> points</strong><div class="progress"><i id="progressbar"></i></div><small>Encore <span id="remaining">200</span> points avant la prochaine récompense</small></div><em>🎁</em></article>
  <div class="tiles">
   <button data-go="catalog"><i>♧</i><b>Boutique</b><span>Voir nos<br>produits</span><em>›</em></button>
@@ -37,6 +37,8 @@
 <section id="admin" class="page inner"><p class="eyebrow">NYXPEPZ CONTROL</p><h1>Administration</h1>
 <div class="admin-panel card"><h2>Ajouter un produit</h2><div class="admin-form"><input id="aName" placeholder="Nom"><input id="aFormat" placeholder="Format / dosage"><input id="aPrice" type="number" placeholder="Prix €"><input id="aCat" placeholder="Catégorie"><input id="aImage" placeholder="URL image (facultatif)"><button id="aAdd">+ Ajouter</button></div><p class="admin-note">Les produits sont enregistrés dans PostgreSQL. Une image peut être ajoutée par URL; l’upload direct sera activé quand le stockage d’images externe sera configuré.</p></div>
 <div id="adminProducts"></div>
+<div class="admin-panel card"><h2>Packs & Promos</h2><div class="admin-form"><input id="pTitle" placeholder="Titre du pack"><input id="pSubtitle" placeholder="Composition / sous-titre"><input id="pPrice" type="number" placeholder="Prix €"><input id="pImage" placeholder="URL de la photo"><input id="pOrder" type="number" placeholder="Ordre (1, 2, 3...)"><button id="pAdd">+ Ajouter le pack</button></div><p class="admin-note">Les 3 premiers packs actifs apparaissent dans le carrousel. Tu peux les masquer, supprimer ou changer leur ordre. L’upload photo direct depuis l’iPhone sera branché sur un stockage d’images persistant.</p></div>
+<div id="adminPacks"></div>
 <div class="admin-panel card"><h2>Ajouter une nouveauté</h2><div class="admin-form"><input id="nTitle" placeholder="Titre"><input id="nSubtitle" placeholder="Sous-titre"><input id="nImage" placeholder="URL image"><button id="nAdd">+ Publier</button></div></div><div id="adminNews"></div></section></main>
 <nav><button data-go="home">⌂<span>Accueil</span></button><button data-go="catalog">♧<span>Boutique</span></button><button data-go="catalog">▭<span>Catalogue</span></button><button data-go="referral">♙<span>Parrainage</span></button><button data-go="profile">♙<span>Profil</span></button></nav>
-<div id="toast"></div><script src="/static/app.js?v=6"></script></body></html>
+<div id="toast"></div><script src="/static/app.js?v=7"></script></body></html>
