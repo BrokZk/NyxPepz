@@ -1,0 +1,250 @@
+[
+  {
+    "id": "5-amino-1mq",
+    "title": "5-Amino-1MQ",
+    "category": "Autres composés",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "5amino",
+      "5 amino",
+      "1mq"
+    ],
+    "file": "/static/encyclopedia/5-amino-1mq.png"
+  },
+  {
+    "id": "adamax",
+    "title": "Adamax",
+    "category": "Nootropiques / Sommeil",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "adamax"
+    ],
+    "file": "/static/encyclopedia/adamax.png"
+  },
+  {
+    "id": "bpc-157",
+    "title": "BPC-157",
+    "category": "Réparation / Peau",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "bpc157",
+      "bpc",
+      "Body Protection Compound"
+    ],
+    "file": "/static/encyclopedia/bpc-157.png"
+  },
+  {
+    "id": "cagrilintide",
+    "title": "Cagrilintide",
+    "category": "Métabolisme",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "cagri"
+    ],
+    "file": "/static/encyclopedia/cagrilintide.png"
+  },
+  {
+    "id": "cjc-1295",
+    "title": "CJC-1295",
+    "category": "Hormone de croissance",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "cjc1295",
+      "cjc",
+      "DAC"
+    ],
+    "file": "/static/encyclopedia/cjc-1295.png"
+  },
+  {
+    "id": "dsip",
+    "title": "DSIP",
+    "category": "Nootropiques / Sommeil",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "Delta Sleep Inducing Peptide"
+    ],
+    "file": "/static/encyclopedia/dsip.png"
+  },
+  {
+    "id": "ghk-cu",
+    "title": "GHK-Cu",
+    "category": "Réparation / Peau",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "ghkcu",
+      "cuivre",
+      "copper"
+    ],
+    "file": "/static/encyclopedia/ghk-cu.png"
+  },
+  {
+    "id": "glow",
+    "title": "GLOW",
+    "category": "Mélanges",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "glow stack"
+    ],
+    "file": "/static/encyclopedia/glow.png"
+  },
+  {
+    "id": "hgh",
+    "title": "HGH",
+    "category": "Hormone de croissance",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "Hormone de Croissance Humaine"
+    ],
+    "file": "/static/encyclopedia/hgh.png"
+  },
+  {
+    "id": "ipamorelin",
+    "title": "Ipamorelin",
+    "category": "Hormone de croissance",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "ipamoreline",
+      "ipam"
+    ],
+    "file": "/static/encyclopedia/ipamorelin.png"
+  },
+  {
+    "id": "klow",
+    "title": "KLOW",
+    "category": "Mélanges",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "klow stack"
+    ],
+    "file": "/static/encyclopedia/klow.png"
+  },
+  {
+    "id": "kpv",
+    "title": "KPV",
+    "category": "Réparation / Peau",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "Lysine Proline Valine"
+    ],
+    "file": "/static/encyclopedia/kpv.png"
+  },
+  {
+    "id": "melanotan-2",
+    "title": "Melanotan 2",
+    "category": "Réparation / Peau",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "melanotan2",
+      "mt2",
+      "melanotan ii"
+    ],
+    "file": "/static/encyclopedia/melanotan-2.png"
+  },
+  {
+    "id": "mots-c",
+    "title": "MOTS-c",
+    "category": "Métabolisme",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "motsc"
+    ],
+    "file": "/static/encyclopedia/mots-c.png"
+  },
+  {
+    "id": "nad-plus",
+    "title": "NAD+",
+    "category": "Autres composés",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "nad",
+      "nicotinamide adenine dinucleotide"
+    ],
+    "file": "/static/encyclopedia/nad-plus.png"
+  },
+  {
+    "id": "pt-141",
+    "title": "PT-141",
+    "category": "Libido",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "pt141",
+      "Bremelanotide",
+      "Brémélanotide"
+    ],
+    "file": "/static/encyclopedia/pt-141.png"
+  },
+  {
+    "id": "retatrutide",
+    "title": "Rétatrutide",
+    "category": "Métabolisme",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "retatrutide",
+      "reta"
+    ],
+    "file": "/static/encyclopedia/retatrutide.png"
+  },
+  {
+    "id": "selank",
+    "title": "Selank",
+    "category": "Nootropiques / Sommeil",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "selank"
+    ],
+    "file": "/static/encyclopedia/selank.png"
+  },
+  {
+    "id": "semax",
+    "title": "Semax",
+    "category": "Nootropiques / Sommeil",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "semax"
+    ],
+    "file": "/static/encyclopedia/semax.png"
+  },
+  {
+    "id": "tb-500",
+    "title": "TB-500",
+    "category": "Réparation / Peau",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "tb500",
+      "thymosine"
+    ],
+    "file": "/static/encyclopedia/tb-500.png"
+  },
+  {
+    "id": "tesamorelin",
+    "title": "Tesamorelin",
+    "category": "Hormone de croissance",
+    "summary": "Fiche NyxPepz · Document original",
+    "source": "Document fourni par NyxPepz",
+    "tags": [
+      "tesamoreline",
+      "tesa"
+    ],
+    "file": "/static/encyclopedia/tesamorelin.png"
+  }
+]

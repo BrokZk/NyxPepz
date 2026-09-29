@@ -1,0 +1,11 @@
+const assert=require('assert');const {calculate,decimal}=require('../static/calculator.js');
+const base={mass:'10',volume:'2',dose:'250',unit:'mcg',scale:100,capacity:''};
+assert.deepEqual(calculate(base),{concentration:5,volumeMl:0.05,mark:5,doseMg:0.25,scale:100});
+for(const [scale,mark] of [[50,2.5],[40,2]])assert.equal(calculate({...base,scale}).mark,mark);
+assert.equal(calculate({...base,dose:'0,25',unit:'mg'}).mark,5);
+for(const value of ['0','-1','','NaN','Infinity','1e4','1,2.3','1000001','0.000000000000000001'])assert(calculate({...base,mass:value}).error,value);
+assert(calculate({...base,dose:'11',unit:'mg'}).error);
+assert(calculate({...base,dose:'5',unit:'mg',capacity:'0.3'}).error);
+assert(calculate({...base,unit:'g'}).error);assert(calculate({...base,scale:60}).error);
+assert.equal(decimal('0,5'),0.5);assert(Number.isNaN(decimal('2abc')));
+console.log('PASS: mg/mcg, decimal comma, U-100/U-50/U-40, invalid values, vial and syringe capacity.');

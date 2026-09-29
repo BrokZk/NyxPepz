@@ -13,36 +13,43 @@ function vial(p){
  return `<div class="product-photo branded-photo"><div class="branded-vial" role="img" aria-label="Visuel ${escapeHTML(p.name)} ${escapeHTML(dose)}"><img loading="lazy" src="/static/nyx-vial.png" alt="" width="1024" height="1536"><div class="vial-print" aria-hidden="true"><span class="vial-brand"><b>Nyx</b>Pepz</span><span class="vial-rule"></span><span class="vial-name ${name.length>11?'long-name':''}">${escapeHTML(name)}</span>${dose?`<span class="vial-dose ${dose.length>10?'long-dose':''}">${escapeHTML(dose)}</span>`:''}<span class="vial-bottom-rule"></span></div></div></div>`
 }
 async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
-try{products=await api("/api/catalog");renderCatalog();loadHomeLeaders();loadNews();loadPacks()}catch(e){toast(e.message)}}
+try{products=await api("/api/catalog");await loadPacks();renderCatalog();loadHomeLeaders();loadNews()}catch(e){toast(e.message)}}
 const categoryLabels={"Perte de graisse":"Perte de poids","Beauté · peau":"Beauté / Peau","Régénération":"Régénération / Réparation","Nootropiques":"Nootropiques","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};
 const categoryIcons={"Perte de graisse":"⚖️","Beauté · peau":"✨","Régénération":"💪","Nootropiques":"🧠","Performance":"⚡","Longévité":"🧬","Libido":"♡"};
+function catalogItems(){
+ return [...packs.filter(p=>p.price>0).map(p=>({...p,kind:'pack',name:p.title,format:packDescription(p),cat:'Packs & promos'})),...products.map(p=>({...p,kind:'product'}))];
+}
+function packDescription(p){return p.components?.length?p.components.map(x=>`${x.quantity} × ${x.name} ${x.format||''}`).join(' + '):p.subtitle||'';}
+function openPack(id){go('catalog');renderCatalog('Packs & promos');const el=document.querySelector(`[data-pack-id="${id}"]`);if(el){el.classList.add('selected-pack');el.scrollIntoView({block:'center',behavior:'smooth'});}}
 function renderCatalog(cat=activeCategory){
+ const items=catalogItems();
  activeCategory=cat;
  const q=($("#search").value||"").trim().toLowerCase();
- const order=["Perte de graisse","Régénération","Beauté · peau","Nootropiques","Libido","Performance","Longévité"]; const cats=[...new Set(products.map(p=>p.cat))].sort((a,b)=>(order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99));
+ const order=["Packs & promos","Perte de graisse","Régénération","Beauté · peau","Nootropiques","Libido","Performance","Longévité"]; const cats=[...new Set(items.map(p=>p.cat))].sort((a,b)=>(order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99));
  const landing=cat==="Tous"&&!q;
  const filters=$("#filters"),target=$("#products");
  filters.classList.toggle('category-menu',landing);
  filters.classList.toggle('category-toolbar',!landing);
  if(landing){
-  filters.innerHTML=cats.map(c=>`<button data-cat="${escapeHTML(c)}"><span class="category-menu-icon" aria-hidden="true">${categoryIcons[c]||'◇'}</span><span><b>${escapeHTML(categoryLabels[c]||c)}</b><small>${products.filter(p=>p.cat===c).length} produit${products.filter(p=>p.cat===c).length===1?"":"s"}</small></span><em aria-hidden="true">›</em></button>`).join('');
+  filters.innerHTML=cats.map(c=>`<button data-cat="${escapeHTML(c)}"><span class="category-menu-icon" aria-hidden="true">${categoryIcons[c]||'◇'}</span><span><b>${escapeHTML(categoryLabels[c]||c)}</b><small>${items.filter(p=>p.cat===c).length} produit${items.filter(p=>p.cat===c).length===1?"":"s"}</small></span><em aria-hidden="true">›</em></button>`).join('');
   target.innerHTML=cats.length?'':'<p class="empty-state">Le catalogue sera bientôt disponible.</p>';
   filters.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{renderCatalog(b.dataset.cat);scrollTo(0,0);});
   $('#catalog .catalog-head h1').textContent='Boutique';
   $('#catalog .catalog-head p').textContent='Choisissez une catégorie';
   return;
  }
- const shown=products.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q));
+ const shown=items.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q));
  filters.innerHTML='<button class="category-back">‹ Toutes les catégories</button>';
  filters.querySelector('button').onclick=()=>{$('#search').value='';renderCatalog('Tous');scrollTo(0,0);};
  $('#catalog .catalog-head h1').textContent=cat==='Tous'?'Recherche':categoryLabels[cat]||cat;
  $('#catalog .catalog-head p').textContent=`${shown.length} produit${shown.length===1?'':'s'}${q?' trouvé'+(shown.length===1?'':'s'):''}`;
- target.innerHTML=shown.length?`<div class="product-grid">${shown.map(p=>`<article class="product">${vial(p)}<h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.format||"NyxPepz")}</p><strong>${escapeHTML(p.price)} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?escapeHTML(p.stock)+" en stock":"Rupture"}</small><div class="catalog-only">${escapeHTML(categoryLabels[p.cat]||p.cat)}</div></article>`).join('')}</div>`:'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>';
+ target.innerHTML=shown.length?`<div class="product-grid">${shown.map(p=>`<article class="product" ${p.kind==='pack'?`data-pack-id="${p.id}"`:`data-product-id="${p.id}"`}>${p.kind==='pack'?`<div class="pack-card-visual">${packVisual(p)}</div>`:vial(p)}<h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.format||"NyxPepz")}</p><strong>${escapeHTML(p.price)} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?escapeHTML(p.stock)+" en stock":"Rupture"}</small><div class="catalog-only">${escapeHTML(categoryLabels[p.cat]||p.cat)}</div></article>`).join('')}</div>`:'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>';
 }
 $("#search").oninput=()=>renderCatalog();
 
 function escapeHTML(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function packProducts(pack){
+ if(pack.components?.length)return pack.components.map(x=>({name:x.name,format:x.format}));
  const normalize=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  function resolve(text){
   const parts=String(text||'').replace(/^pack\s+/i,'').split('+');
@@ -68,7 +75,7 @@ function packVisual(pack){
  return `<div class="promo-vials ${items.length>1?'multiple-vials':''}">${(items.length?items:[{name:'NyxPepz',format:''}]).map(p=>vial({...p,image_url:null})).join('')}</div>`;
 }
 function promoSlide(x){
- return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${escapeHTML(x.title)}</h2><p>${escapeHTML(x.subtitle||"")}</p><strong>${x.price?escapeHTML(x.price)+" €":"Offre à venir"}</strong><button data-go="catalog">Voir le catalogue　›</button></div>${packVisual(x)}<div class="promo-wave"></div></article>`
+ return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${escapeHTML(x.title)}</h2><p>${escapeHTML(x.subtitle||"")}</p><strong>${x.price?escapeHTML(x.price)+" €":"Offre à venir"}</strong><button data-pack-open="${x.id}">Voir ce pack　›</button></div>${packVisual(x)}<div class="promo-wave"></div></article>`
 }
 function setPromo(i,user=false){
  if(!packs.length)return;promoIndex=(i+packs.length)%packs.length;
@@ -82,6 +89,7 @@ async function loadPacks(){
  if(!packs.length){clearInterval(promoTimer);$("#promoTrack").innerHTML='<article class="promo-slide"><div class="promo-copy"><small>NYXPEPZ</small><h2>Découvrez le catalogue</h2><p>Retrouvez tous nos produits.</p><button data-go="catalog">Voir le catalogue　›</button></div></article>';$("#promoDots").innerHTML="";$("#promoTrack button").onclick=()=>go("catalog");return}
 
  $("#promoTrack").innerHTML=packs.map(promoSlide).join("");
+ $("#promoTrack").querySelectorAll("[data-pack-open]").forEach(b=>b.onclick=()=>openPack(Number(b.dataset.packOpen)));
  $("#promoDots").innerHTML=packs.map((_,i)=>`<button aria-label="Promo ${i+1}" class="${i===0?"active":""}"></button>`).join("");
  $$("#promoDots button").forEach((b,i)=>b.onclick=()=>setPromo(i,true));
  $("#promoTrack").querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
@@ -125,7 +133,7 @@ async function loadAdmin(){if(!me.is_admin)return;try{await loadAdminUsers();
  let ps=await api("/api/admin/products");
  $("#adminProducts").innerHTML=ps.map(p=>`<div class="admin-row admin-edit card"><div><b>${p.name}</b><small>${p.format||""} · ${p.cat} · ${p.price} € · Stock ${p.stock??0}</small></div><button onclick='editProduct(${JSON.stringify(p)})'>Modifier</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changeProductPhoto(${p.id},this)"></label><button onclick="toggleProduct(${p.id},${!p.active})">${p.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deleteProduct(${p.id})">Supprimer</button></div>`).join("");
  let pk=await api("/api/admin/packs");
- $("#adminPacks").innerHTML=pk.map(x=>`<div class="admin-row admin-edit card"><div><b>${x.title}</b><small>${x.subtitle||""} · ${x.price} € · ordre ${x.sort_order}</small></div><button onclick='editPack(${JSON.stringify(x)})'>Modifier</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changePackPhoto(${x.id},this)"></label><button onclick="togglePack(${x.id},${!x.active})">${x.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deletePack(${x.id})">Supprimer</button></div>`).join("");
+ $("#adminPacks").innerHTML=pk.map(x=>`<div class="admin-row admin-edit card"><div><b>${x.title}</b><small>${x.subtitle||""} · ${x.price} € · ordre ${x.sort_order}</small></div><button onclick='editPack(${escapeHTML(JSON.stringify(x))})'>Modifier</button><button onclick="editPackComposition(${x.id})">Composition</button><label class="mini-upload">📷<input type="file" accept="image/png,image/jpeg,image/webp" onchange="changePackPhoto(${x.id},this)"></label><button onclick="togglePack(${x.id},${!x.active})">${x.active?"Masquer":"Afficher"}</button><button class="danger" onclick="deletePack(${x.id})">Supprimer</button></div>`).join("");
  let ns=await api("/api/admin/news");$("#adminNews").innerHTML=ns.map(n=>`<div class="admin-row card"><div><b>${n.title}</b><small>${n.subtitle||""}</small></div><button class="danger" onclick="deleteNews(${n.id})">Supprimer</button></div>`).join("")
  }catch(e){toast(e.message)}
 }
@@ -194,3 +202,15 @@ async function deleteAdminUser(id){
 }
 
 document.addEventListener("visibilitychange",restartPromo);
+
+async function editPackComposition(id){
+ try{
+ const [all,entries]=await Promise.all([api('/api/admin/products'),api('/api/admin/packs')]);
+ const pack=entries.find(p=>p.id===id);if(!pack)return;
+ const labels=all.map(p=>`${p.id} : ${p.name} ${p.format||''}`).join('\n');
+ const value=prompt('Produits inclus dans UN pack. Saisissez numéro:quantité, séparés par une virgule. Exemple : 1:1, 14:1\n\n'+labels,(pack.components||[]).map(p=>`${p.product_id}:${p.quantity}`).join(', '));
+ if(value===null)return;
+ const components=value.trim()?value.split(',').map(entry=>{const match=entry.trim().match(/^(\d+):(\d+)$/);if(!match)throw Error('Format attendu : numéro:quantité');return {product_id:Number(match[1]),quantity:Number(match[2])};}):[];
+ await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
+ }catch(e){toast(e.message);}
+}

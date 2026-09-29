@@ -8,7 +8,7 @@
  function loadCart(){
   const owner=me.telegram_id;if(!owner||owner===cartOwner)return;
   cartOwner=owner;
-  try{const saved=JSON.parse(localStorage.getItem('nyx-cart-'+owner)||'[]');cart=Array.isArray(saved)?saved.filter(x=>Number.isInteger(x.product_id)&&Number.isInteger(x.quantity)&&x.quantity>0&&x.quantity<=99):[];}catch{cart=[];}
+  try{const saved=JSON.parse(localStorage.getItem('nyx-cart-'+owner)||'[]');cart=Array.isArray(saved)?saved.filter(x=>((Number.isInteger(x.product_id)&&x.product_id>0&&!('pack_id' in x))||(Number.isInteger(x.pack_id)&&x.pack_id>0&&!('product_id' in x)))&&Number.isInteger(x.quantity)&&x.quantity>0&&x.quantity<=99):[];}catch{cart=[];}
  }
  function saveCart(){
   if(cartOwner)try{localStorage.setItem('nyx-cart-'+cartOwner,JSON.stringify(cart));}catch{}
@@ -27,11 +27,12 @@
  async function freshAccount(){try{me=await api('/api/me');$id('points').textContent=me.loyalty_points;$id('profilePoints').textContent=me.loyalty_points;$id('refpoints2').textContent=me.referral_points;updateLoyalty();}catch{}}
  renderCatalog=function(...args){originalRender(...args);loadCart();updateBadge();updateLoyalty();
   document.querySelectorAll('#products .product').forEach((el,i)=>{
-   const query=($id('search').value||'').trim().toLowerCase();
-   const shown=products.filter(p=>(activeCategory==='Tous'||p.cat===activeCategory)&&(`${p.name} ${p.format}`).toLowerCase().includes(query));
-   const product=shown[i];if(!product)return;
+   const kind=el.hasAttribute('data-pack-id')?'pack':'product';
+   const id=Number(el.dataset.packId||el.dataset.productId);
+   const product=catalogItems().find(p=>p.kind===kind&&p.id===id);if(!product)return;
+   const key=kind==='pack'?'pack_id':'product_id';
    const button=document.createElement('button');button.className='add-to-cart';button.type='button';button.disabled=product.stock<=0;button.textContent=product.stock>0?'＋ Ajouter au panier':'Indisponible';
-   button.onclick=()=>{loadCart();const item=cart.find(x=>x.product_id===product.id);if((item?.quantity||0)>=Math.min(product.stock,99)){toast('Stock disponible atteint');return;}if(item)item.quantity++;else cart.push({product_id:product.id,quantity:1});saveCart();toast('Produit ajouté au panier');};el.append(button);
+   button.onclick=()=>{loadCart();const item=cart.find(x=>x[key]===product.id);if((item?.quantity||0)>=Math.min(product.stock,99)){toast('Stock disponible atteint');return;}if(item)item.quantity++;else cart.push({[key]:product.id,quantity:1});saveCart();toast('Produit ajouté au panier');};el.append(button);
   });
  };
  go=function(id){originalGo(id);if(id==='cart'){loadCart();renderCart();loadCheckoutProfile();}if(id==='loyalty'){freshAccount();updateLoyalty();}if(id==='orders'||id==='parcels')loadOrders(id);if(id==='admin')loadAdminOrders();};
@@ -41,7 +42,7 @@
   updateBadge();$id('checkoutReview').hidden=true;$id('checkoutForm').hidden=!cart.length;$id('cartList').innerHTML='';
   if(!cart.length){$id('cartList').innerHTML='<div class="card pad empty-state">Votre panier est vide.<button class="shop-primary" id="startShopping">Découvrir la boutique</button></div>';$id('startShopping').onclick=()=>go('catalog');return;}
   for(const item of cart){
-   const p=products.find(x=>x.id===item.product_id);const el=document.createElement('article');el.className='cart-item card';
+   const p=catalogItems().find(x=>x.kind===(item.pack_id?'pack':'product')&&x.id===(item.pack_id||item.product_id));const el=document.createElement('article');el.className='cart-item card';
    el.innerHTML=`<div><h2>${escapeHTML(p?.name||'Produit indisponible')}</h2><p>${escapeHTML(p?.format||'')}</p><strong>${p?money(p.price*100*item.quantity):'—'}</strong>${!p||p.stock<item.quantity?'<small class="shop-error">Quantité indisponible : modifiez votre panier.</small>':''}</div><div class="quantity-control"><button type="button" data-change="-1" aria-label="Diminuer la quantité">−</button><span>${item.quantity}</span><button type="button" data-change="1" aria-label="Augmenter la quantité" ${!p||item.quantity>=p.stock||item.quantity>=99?'disabled':''}>＋</button><button type="button" data-remove aria-label="Retirer le produit">Retirer</button></div>`;
    el.querySelectorAll('[data-change]').forEach(b=>b.onclick=()=>{item.quantity+=Number(b.dataset.change);cart=cart.filter(x=>x.quantity>0);saveCart();renderCart();});el.querySelector('[data-remove]').onclick=()=>{cart=cart.filter(x=>x!==item);saveCart();renderCart();};$id('cartList').append(el);
   }
@@ -90,14 +91,23 @@
  }
  $id('refreshOrders').onclick=()=>loadOrders();$id('refreshParcels').onclick=()=>loadOrders('parcels');
  $id('parcelManual').onsubmit=e=>{e.preventDefault();const number=$id('parcelNumber').value.trim();if(!/^[A-Za-z0-9-]{4,64}$/.test(number)){toast('Numéro de suivi invalide');return;}$id('parcelManualHint').textContent='Numéro saisi : '+number+' — recopiez-le sur le site Mondial Relay.';$id('parcelExternalLink').hidden=false;};
- async function loadAdminOrders(){
-  const target=$id('adminShopOrders');target.innerHTML='<p>Chargement des commandes…</p>';
-  try{const orders=await api('/api/shop/admin/orders');target.innerHTML=orders.length?'':'<p>Aucune commande dans l’app.</p>';for(const o of orders){const el=document.createElement('article');el.className='order-card';el.innerHTML=`<small>${escapeHTML(o.reference)}</small><h3>${escapeHTML(o.status_label)} · ${money(o.total_cents)}</h3><p>${escapeHTML(o.contact.first_name)} ${escapeHTML(o.contact.last_name)} ${o.username?'(@'+escapeHTML(o.username)+')':''}<br>${escapeHTML(o.contact.email)} · ${escapeHTML(o.contact.phone)}<br>${escapeHTML(o.contact.address)} ${escapeHTML(o.contact.address_extra)}<br>${escapeHTML(o.contact.postal_code)} ${escapeHTML(o.contact.city)} ${escapeHTML(o.contact.country)}</p>${linesHTML(o.lines)}${summaryHTML(o)}<small>${o.sync_pending} envoi(s) en attente</small>${o.payments.map(x=>`<p class="payment-evidence">Reçu : ${escapeHTML(x.amount)} ${escapeHTML(x.coin)}<br>Versé : ${escapeHTML(x.forwarded_amount)}<br>Transaction : ${escapeHTML(x.transaction_id)}</p>`).join('')}${o.status==='payment_review'?'<button data-confirm class="shop-primary">Vérifier et valider le paiement</button>':''}${['paid','shipped','available'].includes(o.status)?'<button data-shipping class="shop-secondary">Mettre à jour la livraison</button>':''}`;
+ let adminGroup='action',adminCursor=null,adminRequest=0;
+ const orderToolbar=document.createElement('div');orderToolbar.className='order-filters';
+ orderToolbar.innerHTML=[['action','À traiter'],['shipping','En livraison'],['history','Historique']].map(([id,label])=>`<button type="button" data-order-group="${id}" aria-pressed="${id===adminGroup}">${label}</button>`).join('');
+ $id('adminShopOrders').before(orderToolbar);
+ orderToolbar.querySelectorAll('button').forEach(b=>b.onclick=()=>{adminGroup=b.dataset.orderGroup;loadAdminOrders();});
+ const olderButton=document.createElement('button');olderButton.className='shop-secondary';olderButton.textContent='Afficher la suite';olderButton.hidden=true;olderButton.onclick=()=>loadAdminOrders(true);$id('adminShopOrders').after(olderButton);
+ async function loadAdminOrders(append=false){
+  const requestId=++adminRequest;
+  orderToolbar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.orderGroup===adminGroup)));
+  olderButton.hidden=true;
+  const target=$id('adminShopOrders');if(!append){adminCursor=null;target.innerHTML='<p>Chargement des commandes…</p>';} 
+  try{const data=await api('/api/shop/admin/orders?group='+adminGroup+(append&&adminCursor?'&before='+adminCursor:''));if(requestId!==adminRequest)return;const orders=Array.isArray(data)?data:data.orders;adminCursor=data.next_before;olderButton.hidden=!adminCursor;if(!append)target.innerHTML=orders.length?'':'<p>Aucune commande dans cette rubrique.</p>';for(const o of orders){const el=document.createElement('article');el.className='order-card';el.innerHTML=`<small>${escapeHTML(o.reference)}</small><h3>${escapeHTML(o.status_label)} · ${money(o.total_cents)}</h3><p>${escapeHTML(o.contact.first_name)} ${escapeHTML(o.contact.last_name)} ${o.username?'(@'+escapeHTML(o.username)+')':''}<br>${escapeHTML(o.contact.email)} · ${escapeHTML(o.contact.phone)}<br>${escapeHTML(o.contact.address)} ${escapeHTML(o.contact.address_extra)}<br>${escapeHTML(o.contact.postal_code)} ${escapeHTML(o.contact.city)} ${escapeHTML(o.contact.country)}</p>${linesHTML(o.lines)}${summaryHTML(o)}<small>${o.sync_pending} envoi(s) en attente</small>${o.payments.map(x=>`<p class="payment-evidence">Reçu : ${escapeHTML(x.amount)} ${escapeHTML(x.coin)}<br>Versé : ${escapeHTML(x.forwarded_amount)}<br>Transaction : ${escapeHTML(x.transaction_id)}</p>`).join('')}${o.status==='payment_review'?'<button data-confirm class="shop-primary">Vérifier et valider le paiement</button>':''}${['paid','shipped','available'].includes(o.status)?'<button data-shipping class="shop-secondary">Mettre à jour la livraison</button>':''}`;
    if(el.querySelector('[data-confirm]'))el.querySelector('[data-confirm]').onclick=async()=>{const total=prompt('Après vérification chez PayGate, quel montant total le client a-t-il payé en EUR ?');if(total===null)return;const note=prompt('Référence de votre vérification du paiement :');if(!note)return;try{await api('/api/shop/admin/orders/'+encodeURIComponent(o.reference)+'/confirm-payment',{method:'POST',body:JSON.stringify({confirmed_total_cents:Math.round(Number(total.replace(',','.'))*100),note})});toast('Paiement validé');loadAdminOrders();}catch(e){toast(e.message);}};
    if(el.querySelector('[data-shipping]'))el.querySelector('[data-shipping]').onclick=async()=>{const tracking=prompt('Numéro Mondial Relay :',o.tracking_number||'');if(!tracking)return;const status=prompt('Statut : shipped (expédié), available (disponible au retrait), delivered (livré)',o.status==='paid'?'shipped':o.status==='shipped'?'available':'delivered');if(!status)return;try{await api('/api/shop/admin/orders/'+encodeURIComponent(o.reference)+'/shipping',{method:'POST',body:JSON.stringify({tracking_number:tracking,status})});loadAdminOrders();}catch(e){toast(e.message);}};target.append(el);}
   }catch(e){target.textContent=e.message;}
  }
- $id('refreshAdminOrders').onclick=loadAdminOrders;
+ $id('refreshAdminOrders').onclick=()=>loadAdminOrders();
  $id('allowNotifications').onclick=()=>{if(tg?.requestWriteAccess)tg.requestWriteAccess(allowed=>toast(allowed?'Notifications Telegram autorisées':'Vous pouvez consulter les nouvelles dans Mes commandes.'));else toast('Ouvrez une conversation avec le bot dans Telegram pour recevoir ses messages.');};
  const loyal=document.querySelector('.loyal');loyal.setAttribute('role','button');loyal.tabIndex=0;loyal.setAttribute('aria-label','Voir mes points et mes récompenses');loyal.onclick=()=>go('loyalty');loyal.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go('loyalty');}};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$id('orders').classList.contains('active'))loadOrders();});
