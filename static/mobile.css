@@ -181,6 +181,14 @@ html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused
 .conversion-result>small{font-size:11px;line-height:1.6;color:#bbcfef}
 .conversion-result p{font-size:12px;line-height:1.7}.conversion-mark{font-size:14px;line-height:1.6}
 .calculator-card button:focus-visible,.calculator-card input:focus-visible,.calculator-card select:focus-visible{outline:2px solid #8ebaff;outline-offset:2px}
+.syringe-preview{margin:18px 0;padding:16px 10px;border:1px solid #315789;border-radius:16px;background:linear-gradient(145deg,#101f36,#071020);overflow:hidden}
+.syringe-heading{display:flex;flex-wrap:wrap;gap:7px;justify-content:space-between;padding:0 5px;color:#deebff;font-size:13px}
+.syringe-heading span{font-size:11px;color:#a9c1e5}.syringe-preview svg{display:block;width:100%;height:auto;margin:12px 0 0;overflow:visible}
+.syringe-preview [data-syringe-liquid]{transform-box:view-box;transform-origin:70px 0;transform:scaleX(0);transition:transform .55s ease}
+.syringe-preview [data-syringe-piston]{transition:transform .55s ease}
+.syringe-preview p{margin:4px 5px 10px;color:#9edbff;font-size:18px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+.syringe-preview small{display:block;margin:0 5px;color:#a9bad2;font-size:11px;line-height:1.6}.syringe-invalid p{color:#ffbfaa;font-size:13px}
+@media(prefers-reduced-motion:reduce){.syringe-preview [data-syringe-liquid],.syringe-preview [data-syringe-piston]{transition:none}}
 
 .encyclopedia-search{display:block;font-size:12px;color:#afc3e1}.encyclopedia-search input{display:block;box-sizing:border-box;width:100%;margin-top:8px;background:#071020;color:white;border:1px solid #30425f;border-radius:12px;padding:14px;font-size:16px}
 .encyclopedia-card{padding:18px;margin:14px 0}.encyclopedia-card h2{font-size:18px;margin:0 0 8px}.encyclopedia-card p{color:#acc1df;font-size:13px;line-height:1.6}.encyclopedia-document{display:block;text-align:center;text-decoration:none;margin:18px 0}
