@@ -82,3 +82,12 @@ $("#aAdd").onclick=async()=>{try{let image=$("#aImage").value;if($("#aFile").fil
 $("#pAdd").onclick=async()=>{try{let image=$("#pImage").value;if($("#pFile").files[0])image=await uploadPhoto($("#pFile"));await api("/api/admin/packs",{method:"POST",body:JSON.stringify({title:$("#pTitle").value,subtitle:$("#pSubtitle").value,price:+$("#pPrice").value,image_url:image,sort_order:+$("#pOrder").value||0})});toast("Pack ajouté");loadAdmin();loadPacks()}catch(e){toast(e.message)}};
 $("#nAdd").onclick=async()=>{try{let image=$("#nImage").value;if($("#nFile").files[0])image=await uploadPhoto($("#nFile"));await api("/api/admin/news",{method:"POST",body:JSON.stringify({title:$("#nTitle").value,subtitle:$("#nSubtitle").value,image_url:image})});toast("Nouveauté publiée");loadAdmin();loadNews()}catch(e){toast(e.message)}};
 go("home");boot();
+
+async function loadAdminUsers(){
+  try{
+    const users = await api("/api/admin/users");
+    console.log("UTILISATEURS ADMIN :", users);
+  }catch(e){
+    console.error("Erreur utilisateurs admin :", e);
+  }
+}
