@@ -118,6 +118,23 @@ def admin_pack_item(pid):
 def leaderboard():
  rows=User.query.order_by(User.loyalty_points.desc()).limit(20).all()
  return jsonify([{"name":u.username or u.first_name or "Membre","points":u.loyalty_points} for u in rows])
+@app.delete("/api/admin/users/<int:uid>")
+def admin_delete_user(uid):
+    if not require_admin():
+        return jsonify(error="Interdit"), 403
+
+    u = db.session.get(User, uid)
+    if not u:
+        return jsonify(error="Utilisateur introuvable"), 404
+
+    # Empêche l'admin de supprimer son propre compte
+    if u.id == current_user().id:
+        return jsonify(error="Impossible de supprimer votre propre compte"), 400
+
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify(ok=True)
+
 @app.route("/api/weights",methods=["GET","POST"])
 def weights():
  u=current_user()
