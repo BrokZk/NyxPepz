@@ -2,7 +2,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#02050b"><title>NyxPepz</title>
 <link rel="stylesheet" href="/static/style.css?v=8.1">
-<link rel="stylesheet" href="/static/mobile.css?v=11.1">
+<link rel="stylesheet" href="/static/mobile.css?v=11.2">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head><body>
 <div class="bg"></div>
@@ -32,11 +32,11 @@
  <div id="filters" class="filters"></div><div id="products"></div>
 </section>
 <section id="leaderboard" class="page inner"><p class="eyebrow">COMMUNAUTÉ</p><h1>Classement</h1><div id="leaders" class="card list"></div></section>
-<section id="calculator" class="page inner"><p class="eyebrow">CONVERSION</p><h1>Calculateur</h1><p class="calculator-intro">Convertir une quantité connue en volume et en repère de seringue.</p>
-<form id="conversionForm" class="card calculator-card" autocomplete="off"><h2>Vos valeurs</h2><div class="calculator-fields">
-<label>Masse du composé dans le flacon (mg)<input name="mass" type="text" inputmode="decimal" placeholder="0" maxlength="24"></label>
-<label>Volume final de la solution (mL)<input name="volume" type="text" inputmode="decimal" placeholder="0" maxlength="24"></label>
-<label class="full-field">Quantité à convertir (<span id="doseUnitLabel">mcg</span>)<input name="dose" type="text" inputmode="decimal" placeholder="0" maxlength="24"></label>
+<section id="calculator" class="page inner"><p class="eyebrow">CONVERSION</p><h1>Calculateur</h1><p class="calculator-intro">Indiquez le contenu du flacon et la dose à mesurer : le calculateur affiche le volume et le repère sur la seringue.</p>
+<form id="conversionForm" class="card calculator-card" autocomplete="off"><h2>Votre flacon et votre dose</h2><div class="calculator-fields">
+<label>Fiole (mg)<input name="mass" type="text" inputmode="decimal" placeholder="0" maxlength="24" aria-describedby="massHelp"><small id="massHelp" class="calculator-field-help">La quantité totale de produit dans la fiole, indiquée sur son étiquette.</small></label>
+<label>Reconstitution (mL)<input name="volume" type="text" inputmode="decimal" placeholder="0" maxlength="24" aria-describedby="volumeHelp"><small id="volumeHelp" class="calculator-field-help">Le volume final de la solution, une fois le produit dissous.</small></label>
+<label class="full-field">Injection (<span id="doseUnitLabel">mcg</span>)<input name="dose" type="text" inputmode="decimal" placeholder="0" maxlength="24" aria-describedby="doseHelp"><small id="doseHelp" class="calculator-field-help">La dose prévue pour une injection. Choisissez son unité juste en dessous : mg ou mcg. Le calculateur ne détermine pas cette dose.</small></label>
 </div><div class="calculator-segments" role="group" aria-label="Unité de la quantité"><button type="button" data-dose-unit="mcg" aria-pressed="true">mcg</button><button type="button" data-dose-unit="mg" aria-pressed="false">mg</button></div>
 <p class="calculator-label">Échelle inscrite sur la seringue</p><div class="calculator-segments" role="group" aria-label="Échelle de la seringue"><button type="button" data-syringe-scale="100" aria-pressed="true">U‑100<small>100 unités/mL</small></button><button type="button" data-syringe-scale="50" aria-pressed="false">U‑50<small>50 unités/mL</small></button><button type="button" data-syringe-scale="40" aria-pressed="false">U‑40<small>40 unités/mL</small></button></div>
 <p class="calculator-help">Une seringue U‑100 de 0,5 mL contient 50 unités : elle reste U‑100. Choisissez l’échelle indiquée sur votre matériel, pas sa capacité totale.</p>
@@ -78,4 +78,4 @@
 <div id="adminPacks"></div>
 <div class="admin-panel card"><h2>Ajouter une nouveauté</h2><div class="admin-form"><input id="nTitle" placeholder="Titre"><input id="nSubtitle" placeholder="Sous-titre"><input id="nImage" placeholder="URL image"><label class="upload-btn">📷 Photo<input id="nFile" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="nAdd">+ Publier</button></div></div><div id="adminNews"></div></section></main>
 <nav aria-label="Navigation principale"><button data-go="home"><i data-icon="home" aria-hidden="true"></i><span>Accueil</span></button><button data-go="catalog" data-nav-primary="true"><i data-icon="bag" aria-hidden="true"></i><span>Boutique</span></button><button data-go="cart"><i data-icon="cart" aria-hidden="true"></i><span>Panier <b id="cartCount" hidden></b></span></button><button data-go="referral"><i data-icon="users" aria-hidden="true"></i><span>Parrainage</span></button><button data-go="profile"><i data-icon="user" aria-hidden="true"></i><span>Profil</span></button></nav>
-<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=11.0"></script><script src="/static/app.js?v=11.0"></script><script src="/static/shop.js?v=11.0"></script><script src="/static/calculator.js?v=11.1"></script><script src="/static/encyclopedia.js?v=11.0"></script></body></html>
+<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=11.0"></script><script src="/static/app.js?v=11.0"></script><script src="/static/shop.js?v=11.0"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script></body></html>

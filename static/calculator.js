@@ -56,7 +56,7 @@
   renderSyringe(data);
   if(data.error){hint.textContent=data.error;hint.classList.add('shop-error');return;}
   hint.textContent='Résultat mathématique : faites valider la concentration, la dose et le matériel par un professionnel de santé.';
-  result.innerHTML=`<small>VOLUME CALCULÉ</small><strong>${format(data.volumeMl)} mL</strong><div class="conversion-mark">Repère théorique : <b>${format(data.mark)}</b> sur l’échelle U‑${scale}</div><p>Concentration : ${format(data.concentration)} mg/mL<br>Quantité saisie : ${format(data.doseMg)} mg</p><small>Affichage arrondi à 8 chiffres significatifs. Ne pas arrondir à une graduation de seringue sans validation professionnelle.</small>`;
+  result.innerHTML=`<small>VOLUME CALCULÉ</small><strong>${format(data.volumeMl)} mL</strong><div class="conversion-mark">Repère théorique : <b>${format(data.mark)}</b> sur l’échelle U‑${scale}</div><p>Concentration : ${format(data.concentration)} mg/mL<br>Dose saisie : ${format(data.doseMg)} mg</p><small>Affichage arrondi à 8 chiffres significatifs. Ne pas arrondir à une graduation de seringue sans validation professionnelle.</small>`;
   result.hidden=false;
  }
  form.addEventListener('submit',e=>e.preventDefault());form.addEventListener('input',refresh);form.addEventListener('change',refresh);

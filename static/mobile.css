@@ -168,6 +168,7 @@ html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused
 .calculator-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .calculator-fields label,.calculator-capacity{font-size:12px;color:#b3c7e4;display:block;line-height:1.5}
 .calculator-fields .full-field{grid-column:1/-1}
+.calculator-field-help{display:block;margin-top:8px;font-size:11px;line-height:1.6;color:#aabedb}
 .calculator-fields input,.calculator-capacity select{display:block;width:100%;box-sizing:border-box;margin-top:7px;padding:12px;background:#071020;color:white;border:1px solid #30425f;border-radius:11px;font:inherit;font-size:16px;min-width:0}
 .calculator-segments{display:flex;gap:5px;background:#071020;border:1px solid #30425f;padding:4px;border-radius:12px;margin:12px 0}
 .calculator-segments button{flex:1;min-width:0;border:0;background:transparent;color:#a9c1e5;padding:10px 4px;border-radius:8px;font-size:13px}
