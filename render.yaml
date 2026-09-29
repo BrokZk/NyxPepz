@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: nyxpepz
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: AFTERSHIP_API_KEY
+        sync: false
+      - key: ORDER_WEBHOOK_SECRET
+        generateValue: true
