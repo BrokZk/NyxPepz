@@ -2,7 +2,9 @@ import os, hmac, hashlib, json, secrets, string
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
 import requests
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, update, case
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+import click
 try:
  import cloudinary.uploader
 except Exception:
@@ -33,6 +35,22 @@ class Parcel(db.Model):
  id=db.Column(db.Integer,primary_key=True);user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False,index=True);tracking_number=db.Column(db.String(128),nullable=False);carrier=db.Column(db.String(64),default="mondialrelay-fr");aftership_id=db.Column(db.String(128));status=db.Column(db.String(64),default="Pending");last_checkpoint=db.Column(db.Text);updated_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc));__table_args__=(db.UniqueConstraint("user_id","tracking_number",name="uq_user_tracking"),)
 class ReferralOrderEvent(db.Model):
  id=db.Column(db.Integer,primary_key=True);external_order_id=db.Column(db.String(128),unique=True,nullable=False);referred_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);referrer_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);credited_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
+
+class ConfirmedOrderEvent(db.Model):
+ # Every processed order, including customers without a referrer. Existing
+ # referral_order_event rows remain authoritative for pre-upgrade duplicates.
+ id=db.Column(db.Integer,primary_key=True)
+ external_order_id=db.Column(db.String(128),unique=True,nullable=False)
+ user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False,index=True)
+ loyalty_points=db.Column(db.Integer,nullable=False)
+ processed_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc),nullable=False)
+
+def database_failure():
+ db.session.rollback()
+ app.logger.exception("Échec de la transaction de points/parrainage")
+ response=jsonify(error="Base de données temporairement indisponible. Réessayez.")
+ response.headers["Retry-After"]="1"
+ return response,503
 
 SEED=[
 ("Retatrutide","10 mg",80,"Perte de graisse","/static/reta10.webp"),("Retatrutide","15 mg",100,"Perte de graisse","/static/reta15.webp"),("Retatrutide","20 mg",120,"Perte de graisse","/static/reta20.webp"),("Retatrutide","30 mg",140,"Perte de graisse","/static/reta30.webp"),
@@ -153,14 +171,21 @@ def admin_update_user_points(uid):
     if delta not in (-10, -1, 1, 10):
         return jsonify(error="Modification invalide"), 400
 
-    u.loyalty_points = max(0, (u.loyalty_points or 0) + delta)
-
-    db.session.commit()
+    try:
+        total = User.loyalty_points + delta
+        db.session.execute(update(User).where(User.id == uid).values(
+            loyalty_points=case((total < 0, 0), else_=total)),
+            execution_options={"synchronize_session": False})
+        db.session.refresh(u)
+        points = u.loyalty_points
+        db.session.commit()
+    except SQLAlchemyError:
+        return database_failure()
 
     return jsonify(
         ok=True,
         id=u.id,
-        points=u.loyalty_points
+        points=points
     )
 
 
@@ -177,8 +202,24 @@ def admin_delete_user(uid):
     if u.id == current_user().id:
         return jsonify(error="Impossible de supprimer votre propre compte"), 400
 
-    db.session.delete(u)
-    db.session.commit()
+    try:
+        # Serialize deletion with referral assignment and incoming orders.
+        db.session.execute(update(User).where(User.id == uid).values(
+            referral_points=User.referral_points))
+        linked = (
+            User.query.filter_by(referred_by_user_id=uid).first()
+            or ReferralOrderEvent.query.filter(
+                (ReferralOrderEvent.referred_user_id == uid)
+                | (ReferralOrderEvent.referrer_user_id == uid)).first()
+            or ConfirmedOrderEvent.query.filter_by(user_id=uid).first()
+        )
+        if linked:
+            db.session.rollback()
+            return jsonify(error="Suppression impossible : compte lié à un parrainage ou à des commandes"), 409
+        db.session.delete(u)
+        db.session.commit()
+    except SQLAlchemyError:
+        return database_failure()
     return jsonify(ok=True)
 
 @app.route("/api/weights",methods=["GET","POST"])
@@ -194,13 +235,33 @@ def weights():
  return jsonify([{"id":x.id,"weight":x.weight_kg,"date":x.created_at.isoformat()} for x in rows])
 @app.post("/api/referral/apply")
 def referral_apply():
- u=current_user()
- if not u:return jsonify(error="Non authentifié"),401
- if u.referred_by_user_id:return jsonify(error="Parrain déjà défini"),409
- ref=User.query.filter_by(referral_code=str((request.json or {}).get("code","")).upper().strip()).first()
- if not ref:return jsonify(error="Code introuvable"),404
- if ref.id==u.id:return jsonify(error="Auto-parrainage interdit"),400
- u.referred_by_user_id=ref.id;db.session.commit();return jsonify(ok=True)
+ try:
+  u=current_user()
+  if not u:return jsonify(error="Non authentifié"),401
+  if u.referred_by_user_id is not None:return jsonify(error="Parrain déjà défini"),409
+  d=request.get_json(silent=True)
+  if not isinstance(d,dict) or not isinstance(d.get("code"),str):
+   return jsonify(error="Code invalide"),400
+  ref=User.query.filter_by(referral_code=d["code"].upper().strip()).first()
+  if not ref:return jsonify(error="Code introuvable"),404
+  if ref.id==u.id:return jsonify(error="Auto-parrainage interdit"),400
+  # A conditional UPDATE, rather than a read followed by an assignment,
+  # guarantees that only one competing request can choose the referrer.
+  exists=db.session.execute(update(User).where(User.id==ref.id).values(
+   referral_points=User.referral_points)).rowcount
+  if not exists:
+   db.session.rollback()
+   return jsonify(error="Code introuvable"),404
+  changed=db.session.execute(update(User).where(
+   User.id==u.id,User.referred_by_user_id.is_(None),User.id!=ref.id
+  ).values(referred_by_user_id=ref.id),execution_options={"synchronize_session":False}).rowcount
+  if changed!=1:
+   db.session.rollback()
+   return jsonify(error="Parrain déjà défini"),409
+  db.session.commit()
+  return jsonify(ok=True)
+ except SQLAlchemyError:
+  return database_failure()
 
 AFTERSHIP_BASE=os.environ.get("AFTERSHIP_BASE_URL","https://api.aftership.com/tracking/2024-07")
 def aftership(method,path,payload=None):
@@ -290,15 +351,108 @@ def admin_news_item(nid):
 def order_confirmed():
  expected=os.environ.get("ORDER_WEBHOOK_SECRET","")
  if not expected or not hmac.compare_digest(request.headers.get("X-Nyx-Secret",""),expected):return jsonify(error="Interdit"),403
- d=request.json or {};oid,tg_id=str(d.get("order_id","")),d.get("telegram_id")
- if not oid or not tg_id:return jsonify(error="Données manquantes"),400
- if ReferralOrderEvent.query.filter_by(external_order_id=oid).first():return jsonify(ok=True,duplicate=True)
- u=User.query.filter_by(telegram_id=tg_id).first()
- if not u:return jsonify(error="Utilisateur inconnu"),404
- u.loyalty_points+=max(int(d.get("loyalty_points",1)),0)
- if u.referred_by_user_id:
-  ref=db.session.get(User,u.referred_by_user_id);ref.referral_points+=1;db.session.add(ReferralOrderEvent(external_order_id=oid,referred_user_id=u.id,referrer_user_id=ref.id))
- db.session.commit();return jsonify(ok=True)
+ d=request.get_json(silent=True)
+ if not isinstance(d,dict):return jsonify(error="Données invalides"),400
+ raw_oid=d.get("order_id")
+ if isinstance(raw_oid,bool) or not isinstance(raw_oid,(str,int)):
+  return jsonify(error="Identifiant de commande invalide"),400
+ # Preserve the exact identifier used by the original bot and legacy events.
+ oid=str(raw_oid)
+ if not oid.strip() or len(oid)>128:return jsonify(error="Identifiant de commande invalide"),400
+ try:
+  tg_id=integer_value(d.get("telegram_id"))
+  points=max(integer_value(d.get("loyalty_points",1)),0)
+  if not 0<tg_id<=9223372036854775807 or points>2147483647:raise ValueError()
+ except (TypeError,ValueError):return jsonify(error="Données de points ou Telegram invalides"),400
+ try:
+  duplicate=order_duplicate(oid,tg_id)
+  if duplicate is not None:return duplicate
+  u=User.query.filter_by(telegram_id=tg_id).first()
+  if not u:return jsonify(error="Utilisateur inconnu"),404
+  # The unique insert claims the order before any balance is changed.
+  db.session.add(ConfirmedOrderEvent(external_order_id=oid,user_id=u.id,loyalty_points=points))
+  db.session.flush()
+  # SQL arithmetic also serializes with admin adjustments and referral_apply.
+  changed=db.session.execute(update(User).where(
+   User.id==u.id,User.loyalty_points<=2147483647-points
+  ).values(loyalty_points=User.loyalty_points+points),
+   execution_options={"synchronize_session":False}).rowcount
+  if changed!=1:
+   db.session.rollback()
+   return jsonify(error="Compte supprimé ou plafond de points atteint"),409
+  db.session.refresh(u)
+  if u.referred_by_user_id is not None:
+   ref_id=u.referred_by_user_id
+   if ref_id==u.id:
+    db.session.rollback()
+    return jsonify(error="Auto-parrainage interdit : lien existant à corriger"),409
+   # Lock the balance before counting events; concurrent orders for this
+   # referrer cannot overwrite one another's credits (PostgreSQL and SQLite).
+   exists=db.session.execute(update(User).where(User.id==ref_id).values(
+    referral_points=User.referral_points),execution_options={"synchronize_session":False}).rowcount
+   if exists!=1:
+    db.session.rollback()
+    return jsonify(error="Parrain introuvable : lien existant à corriger"),409
+   db.session.add(ReferralOrderEvent(external_order_id=oid,referred_user_id=u.id,referrer_user_id=ref_id))
+   db.session.flush()
+   total=ReferralOrderEvent.query.filter_by(referrer_user_id=ref_id).count()
+   db.session.execute(update(User).where(User.id==ref_id).values(referral_points=total),
+    execution_options={"synchronize_session":False})
+  db.session.commit()
+  return jsonify(ok=True)
+ except IntegrityError:
+  db.session.rollback()
+  # A competing request may have committed the same unique order while we
+  # were inserting. Only that proven duplicate may be acknowledged as success.
+  try:
+   duplicate=order_duplicate(oid,tg_id)
+   if duplicate is not None:return duplicate
+  except SQLAlchemyError:
+   return database_failure()
+  return database_failure()
+ except SQLAlchemyError:
+  return database_failure()
+
+def integer_value(value):
+ if isinstance(value,bool) or not isinstance(value,(str,int)):raise ValueError()
+ return int(value)
+
+def order_duplicate(oid,tg_id):
+ event=ConfirmedOrderEvent.query.filter_by(external_order_id=oid).first()
+ if event is not None:
+  owner_id=event.user_id
+ else:
+  # Do not credit orders already recorded by the original app a second time.
+  event=ReferralOrderEvent.query.filter_by(external_order_id=oid).first()
+  if event is None:return None
+  owner_id=event.referred_user_id
+ owner=db.session.get(User,owner_id)
+ if owner is None or owner.telegram_id!=tg_id:
+  return jsonify(error="Commande déjà associée à un autre compte ou compte supprimé"),409
+ return jsonify(ok=True,duplicate=True)
+
+@app.cli.command("reconcile-referrals")
+@click.option("--repair",is_flag=True,help="Réaligner les compteurs sur les événements enregistrés.")
+def reconcile_referrals(repair):
+ """Audit des compteurs de parrainage ; aucune modification sans --repair."""
+ try:
+  differences=0
+  for uid, in db.session.query(User.id).order_by(User.id).all():
+   if repair:
+    db.session.execute(update(User).where(User.id==uid).values(referral_points=User.referral_points))
+   stored=db.session.query(User.referral_points).filter(User.id==uid).scalar()
+   total=ReferralOrderEvent.query.filter_by(referrer_user_id=uid).count()
+   if stored!=total:
+    differences+=1
+    click.echo(f"Utilisateur {uid}: referral_points={stored}, événements={total}")
+    if repair:
+     db.session.execute(update(User).where(User.id==uid).values(referral_points=total))
+  if repair:db.session.commit()
+  else:db.session.rollback()
+  click.echo(f"{differences} écart(s) {'corrigé(s)' if repair else 'détecté(s)'}. Points fidélité inchangés.")
+ except SQLAlchemyError as exc:
+  db.session.rollback()
+  raise click.ClickException("Audit interrompu ; aucune correction enregistrée. Réessayez.") from exc
 
 with app.app_context():
  db.create_all()
