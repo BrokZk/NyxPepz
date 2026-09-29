@@ -118,6 +118,23 @@ def admin_pack_item(pid):
 def leaderboard():
  rows=User.query.order_by(User.loyalty_points.desc()).limit(20).all()
  return jsonify([{"name":u.username or u.first_name or "Membre","points":u.loyalty_points} for u in rows])
+@app.get("/api/admin/users")
+def admin_users():
+    if not require_admin():
+        return jsonify(error="Interdit"), 403
+
+    users = User.query.order_by(User.loyalty_points.desc()).all()
+
+    return jsonify([
+        {
+            "id": u.id,
+            "telegram_id": u.telegram_id,
+            "name": u.username or u.first_name or "Membre",
+            "points": u.loyalty_points
+        }
+        for u in users
+    ])
+
 @app.delete("/api/admin/users/<int:uid>")
 def admin_delete_user(uid):
     if not require_admin():
