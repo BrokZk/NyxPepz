@@ -101,3 +101,33 @@ body{padding-bottom:132px}
  .hero-zone:before{top:103px;left:-280px}.hero-zone:after{top:163px;left:-175px}
 }
 @media(prefers-reduced-motion:reduce){.hero-zone:before,.hero-zone:after{animation:none}}
+
+
+/* V7.3 — reference-inspired NyxPepz wordmark + integrated crescent */
+.welcome:before,.welcome:after{content:none!important}
+.welcome .premium-brand{
+ display:flex!important;position:absolute;z-index:5;right:24px;top:36px;
+ align-items:center;gap:3px;height:62px;white-space:nowrap;pointer-events:none;
+ transform:translateZ(0);
+}
+.brand-word{
+ position:relative;font-family:Georgia,"Times New Roman",serif;font-size:34px;font-weight:400;
+ letter-spacing:-1.5px;line-height:1;color:#eaf2ff;
+ background:linear-gradient(180deg,#ffffff 8%,#e8f1ff 43%,#a9c9ff 76%,#eef6ff 100%);
+ -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+ filter:drop-shadow(0 0 4px rgba(255,255,255,.45)) drop-shadow(0 0 10px rgba(36,112,255,.62));
+}
+.brand-moon{position:relative;width:39px;height:52px;display:block;filter:drop-shadow(0 0 7px #3f91ff) drop-shadow(0 0 16px #075dff)}
+.brand-moon:before{content:"";position:absolute;inset:2px 3px;border-radius:50%;background:radial-gradient(circle at 32% 35%,#f3fbff 0 5%,#83c6ff 25%,#247cff 58%,#0746be 82%,#02183e 100%);box-shadow:inset 5px 0 8px rgba(217,243,255,.8),0 0 13px rgba(29,119,255,.8)}
+.brand-moon:after{content:"";position:absolute;width:31px;height:46px;left:0;top:0;border-radius:50%;background:#03102a;transform:translate(-6px,-1px);box-shadow:7px 0 8px rgba(26,111,255,.13)}
+.welcome .dna-scene{right:-2px;top:-34px;opacity:.50;filter:blur(.15px)}
+.welcome .dna-glow{opacity:.58}
+.promo-img{mix-blend-mode:screen;opacity:.96;max-width:31%;filter:contrast(1.08) saturate(1.08) drop-shadow(0 12px 10px #000) drop-shadow(0 0 12px #147bff)}
+@media(max-width:520px){
+ .welcome .premium-brand{right:12px;top:32px;height:54px}
+ .brand-word{font-size:28px;letter-spacing:-1.2px}
+ .brand-moon{width:33px;height:45px}
+ .brand-moon:after{width:27px;height:41px}
+ .welcome .dna-scene{right:-26px;top:-34px;opacity:.43}
+ .promo-img{width:27%;max-width:27%;height:78%;right:5%;bottom:8%}
+}
