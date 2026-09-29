@@ -2,9 +2,8 @@ import os, hmac, hashlib, json, secrets, string
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
 import requests
-from sqlalchemy import inspect, text, update, case
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-import click
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 try:
  import cloudinary.uploader
 except Exception:
@@ -37,24 +36,10 @@ class ReferralOrderEvent(db.Model):
  id=db.Column(db.Integer,primary_key=True);external_order_id=db.Column(db.String(128),unique=True,nullable=False);referred_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);referrer_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False);credited_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 
 class ConfirmedOrderEvent(db.Model):
- # Every processed order, including customers without a referrer. Existing
- # referral_order_event rows remain authoritative for pre-upgrade duplicates.
- id=db.Column(db.Integer,primary_key=True)
- external_order_id=db.Column(db.String(128),unique=True,nullable=False)
- user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False,index=True)
- loyalty_points=db.Column(db.Integer,nullable=False)
- processed_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc),nullable=False)
-
-class CatalogUpdate(db.Model):
- # A durable marker prevents a future restart from overwriting Admin edits.
- key=db.Column(db.String(100),primary_key=True)
-
-def database_failure():
- db.session.rollback()
- app.logger.exception("Échec de la transaction de points/parrainage")
- response=jsonify(error="Base de données temporairement indisponible. Réessayez.")
- response.headers["Retry-After"]="1"
- return response,503
+ # Keep order IDs even after an admin deletes a user. No new user FK is needed.
+ external_order_id=db.Column(db.String(128),primary_key=True)
+ telegram_id=db.Column(db.BigInteger,nullable=False)
+ processed_at=db.Column(db.DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 
 SEED=[
 ("Retatrutide","10 mg",80,"Perte de graisse","/static/reta10.webp"),("Retatrutide","15 mg",100,"Perte de graisse","/static/reta15.webp"),("Retatrutide","20 mg",120,"Perte de graisse","/static/reta20.webp"),("Retatrutide","30 mg",140,"Perte de graisse","/static/reta30.webp"),
@@ -175,21 +160,14 @@ def admin_update_user_points(uid):
     if delta not in (-10, -1, 1, 10):
         return jsonify(error="Modification invalide"), 400
 
-    try:
-        total = User.loyalty_points + delta
-        db.session.execute(update(User).where(User.id == uid).values(
-            loyalty_points=case((total < 0, 0), else_=total)),
-            execution_options={"synchronize_session": False})
-        db.session.refresh(u)
-        points = u.loyalty_points
-        db.session.commit()
-    except SQLAlchemyError:
-        return database_failure()
+    u.loyalty_points = max(0, (u.loyalty_points or 0) + delta)
+
+    db.session.commit()
 
     return jsonify(
         ok=True,
         id=u.id,
-        points=points
+        points=u.loyalty_points
     )
 
 
@@ -206,24 +184,8 @@ def admin_delete_user(uid):
     if u.id == current_user().id:
         return jsonify(error="Impossible de supprimer votre propre compte"), 400
 
-    try:
-        # Serialize deletion with referral assignment and incoming orders.
-        db.session.execute(update(User).where(User.id == uid).values(
-            referral_points=User.referral_points))
-        linked = (
-            User.query.filter_by(referred_by_user_id=uid).first()
-            or ReferralOrderEvent.query.filter(
-                (ReferralOrderEvent.referred_user_id == uid)
-                | (ReferralOrderEvent.referrer_user_id == uid)).first()
-            or ConfirmedOrderEvent.query.filter_by(user_id=uid).first()
-        )
-        if linked:
-            db.session.rollback()
-            return jsonify(error="Suppression impossible : compte lié à un parrainage ou à des commandes"), 409
-        db.session.delete(u)
-        db.session.commit()
-    except SQLAlchemyError:
-        return database_failure()
+    db.session.delete(u)
+    db.session.commit()
     return jsonify(ok=True)
 
 @app.route("/api/weights",methods=["GET","POST"])
@@ -244,28 +206,26 @@ def referral_apply():
   if not u:return jsonify(error="Non authentifié"),401
   if u.referred_by_user_id is not None:return jsonify(error="Parrain déjà défini"),409
   d=request.get_json(silent=True)
-  if not isinstance(d,dict) or not isinstance(d.get("code"),str):
-   return jsonify(error="Code invalide"),400
-  ref=User.query.filter_by(referral_code=d["code"].upper().strip()).first()
+  code=d.get("code") if isinstance(d,dict) else None
+  if not isinstance(code,str):return jsonify(error="Code introuvable"),404
+  code=code.upper().strip()
+  if len(code)!=5 or any(c not in string.ascii_uppercase+string.digits for c in code):
+   return jsonify(error="Code introuvable"),404
+  ref=User.query.filter_by(referral_code=code).first()
   if not ref:return jsonify(error="Code introuvable"),404
   if ref.id==u.id:return jsonify(error="Auto-parrainage interdit"),400
-  # A conditional UPDATE, rather than a read followed by an assignment,
-  # guarantees that only one competing request can choose the referrer.
-  exists=db.session.execute(update(User).where(User.id==ref.id).values(
-   referral_points=User.referral_points)).rowcount
-  if not exists:
-   db.session.rollback()
-   return jsonify(error="Code introuvable"),404
-  changed=db.session.execute(update(User).where(
-   User.id==u.id,User.referred_by_user_id.is_(None),User.id!=ref.id
-  ).values(referred_by_user_id=ref.id),execution_options={"synchronize_session":False}).rowcount
+  # Compare-and-set in the database: two requests cannot replace each other's referrer.
+  changed=User.query.filter(User.id==u.id,User.referred_by_user_id.is_(None)).update(
+   {User.referred_by_user_id:ref.id},synchronize_session=False)
   if changed!=1:
    db.session.rollback()
    return jsonify(error="Parrain déjà défini"),409
   db.session.commit()
   return jsonify(ok=True)
- except SQLAlchemyError:
-  return database_failure()
+ except Exception:
+  db.session.rollback()
+  app.logger.exception("Referral assignment failed")
+  return jsonify(error="Impossible d'enregistrer le parrainage"),500
 
 AFTERSHIP_BASE=os.environ.get("AFTERSHIP_BASE_URL","https://api.aftership.com/tracking/2024-07")
 def aftership(method,path,payload=None):
@@ -360,103 +320,69 @@ def order_confirmed():
  raw_oid=d.get("order_id")
  if isinstance(raw_oid,bool) or not isinstance(raw_oid,(str,int)):
   return jsonify(error="Identifiant de commande invalide"),400
- # Preserve the exact identifier used by the original bot and legacy events.
- oid=str(raw_oid)
- if not oid.strip() or len(oid)>128:return jsonify(error="Identifiant de commande invalide"),400
+ oid=str(raw_oid).strip()
+ if not oid or len(oid)>128:return jsonify(error="Identifiant de commande invalide"),400
  try:
-  tg_id=integer_value(d.get("telegram_id"))
-  points=max(integer_value(d.get("loyalty_points",1)),0)
-  if not 0<tg_id<=9223372036854775807 or points>2147483647:raise ValueError()
- except (TypeError,ValueError):return jsonify(error="Données de points ou Telegram invalides"),400
+  raw_tg=d.get("telegram_id")
+  raw_points=d.get("loyalty_points",1)
+  if isinstance(raw_tg,bool) or not isinstance(raw_tg,(str,int)):raise ValueError
+  if isinstance(raw_points,bool) or not isinstance(raw_points,(str,int)):raise ValueError
+  tg_id=int(raw_tg)
+  points=max(int(raw_points),0)
+  if not 0<tg_id<2**63 or points>2**31-1:raise ValueError
+ except (TypeError,ValueError,OverflowError):
+  return jsonify(error="Données invalides"),400
+
+ def duplicate_response():
+  event=db.session.get(ConfirmedOrderEvent,oid)
+  if event is not None:
+   if event.telegram_id!=tg_id:return jsonify(error="Commande déjà attribuée à un autre utilisateur"),409
+   return jsonify(ok=True,duplicate=True)
+  # Preserve idempotency for orders credited before this version was installed.
+  legacy=ReferralOrderEvent.query.filter_by(external_order_id=oid).first()
+  if legacy is not None:
+   owner=db.session.get(User,legacy.referred_user_id)
+   if owner is not None and owner.telegram_id!=tg_id:
+    return jsonify(error="Commande déjà attribuée à un autre utilisateur"),409
+   return jsonify(ok=True,duplicate=True)
+  return None
+
  try:
-  duplicate=order_duplicate(oid,tg_id)
+  duplicate=duplicate_response()
   if duplicate is not None:return duplicate
-  u=User.query.filter_by(telegram_id=tg_id).first()
-  if not u:return jsonify(error="Utilisateur inconnu"),404
-  # The unique insert claims the order before any balance is changed.
-  db.session.add(ConfirmedOrderEvent(external_order_id=oid,user_id=u.id,loyalty_points=points))
+  # Reserve every order, including those without a referrer, in this transaction.
+  # The primary key arbitrates simultaneous deliveries of the same order.
+  db.session.add(ConfirmedOrderEvent(external_order_id=oid,telegram_id=tg_id))
   db.session.flush()
-  # SQL arithmetic also serializes with admin adjustments and referral_apply.
-  changed=db.session.execute(update(User).where(
-   User.id==u.id,User.loyalty_points<=2147483647-points
-  ).values(loyalty_points=User.loyalty_points+points),
-   execution_options={"synchronize_session":False}).rowcount
-  if changed!=1:
+  u=User.query.filter_by(telegram_id=tg_id).with_for_update().first()
+  if not u:
    db.session.rollback()
-   return jsonify(error="Compte supprimé ou plafond de points atteint"),409
-  db.session.refresh(u)
-  if u.referred_by_user_id is not None:
+   return jsonify(error="Utilisateur inconnu"),404
+  User.query.filter_by(id=u.id).update(
+   {User.loyalty_points:User.loyalty_points+points},synchronize_session=False)
+  if u.referred_by_user_id is not None and u.referred_by_user_id!=u.id:
    ref_id=u.referred_by_user_id
-   if ref_id==u.id:
-    db.session.rollback()
-    return jsonify(error="Auto-parrainage interdit : lien existant à corriger"),409
-   # Lock the balance before counting events; concurrent orders for this
-   # referrer cannot overwrite one another's credits (PostgreSQL and SQLite).
-   exists=db.session.execute(update(User).where(User.id==ref_id).values(
-    referral_points=User.referral_points),execution_options={"synchronize_session":False}).rowcount
-   if exists!=1:
-    db.session.rollback()
-    return jsonify(error="Parrain introuvable : lien existant à corriger"),409
-   db.session.add(ReferralOrderEvent(external_order_id=oid,referred_user_id=u.id,referrer_user_id=ref_id))
-   db.session.flush()
-   total=ReferralOrderEvent.query.filter_by(referrer_user_id=ref_id).count()
-   db.session.execute(update(User).where(User.id==ref_id).values(referral_points=total),
-    execution_options={"synchronize_session":False})
+   changed=User.query.filter_by(id=ref_id).update(
+    {User.referral_points:User.referral_points+1},synchronize_session=False)
+   if changed==1:
+    db.session.add(ReferralOrderEvent(external_order_id=oid,referred_user_id=u.id,referrer_user_id=ref_id))
+  # Order reservation, loyalty points and referral credit succeed or roll back together.
   db.session.commit()
   return jsonify(ok=True)
  except IntegrityError:
   db.session.rollback()
-  # A competing request may have committed the same unique order while we
-  # were inserting. Only that proven duplicate may be acknowledged as success.
   try:
-   duplicate=order_duplicate(oid,tg_id)
+   duplicate=duplicate_response()
    if duplicate is not None:return duplicate
-  except SQLAlchemyError:
-   return database_failure()
-  return database_failure()
- except SQLAlchemyError:
-  return database_failure()
-
-def integer_value(value):
- if isinstance(value,bool) or not isinstance(value,(str,int)):raise ValueError()
- return int(value)
-
-def order_duplicate(oid,tg_id):
- event=ConfirmedOrderEvent.query.filter_by(external_order_id=oid).first()
- if event is not None:
-  owner_id=event.user_id
- else:
-  # Do not credit orders already recorded by the original app a second time.
-  event=ReferralOrderEvent.query.filter_by(external_order_id=oid).first()
-  if event is None:return None
-  owner_id=event.referred_user_id
- owner=db.session.get(User,owner_id)
- if owner is None or owner.telegram_id!=tg_id:
-  return jsonify(error="Commande déjà associée à un autre compte ou compte supprimé"),409
- return jsonify(ok=True,duplicate=True)
-
-@app.cli.command("reconcile-referrals")
-@click.option("--repair",is_flag=True,help="Réaligner les compteurs sur les événements enregistrés.")
-def reconcile_referrals(repair):
- """Audit des compteurs de parrainage ; aucune modification sans --repair."""
- try:
-  differences=0
-  for uid, in db.session.query(User.id).order_by(User.id).all():
-   if repair:
-    db.session.execute(update(User).where(User.id==uid).values(referral_points=User.referral_points))
-   stored=db.session.query(User.referral_points).filter(User.id==uid).scalar()
-   total=ReferralOrderEvent.query.filter_by(referrer_user_id=uid).count()
-   if stored!=total:
-    differences+=1
-    click.echo(f"Utilisateur {uid}: referral_points={stored}, événements={total}")
-    if repair:
-     db.session.execute(update(User).where(User.id==uid).values(referral_points=total))
-  if repair:db.session.commit()
-  else:db.session.rollback()
-  click.echo(f"{differences} écart(s) {'corrigé(s)' if repair else 'détecté(s)'}. Points fidélité inchangés.")
- except SQLAlchemyError as exc:
+  except Exception:
+   db.session.rollback()
+   app.logger.exception("Order duplicate lookup failed")
+  app.logger.exception("Order confirmation integrity failure")
+  return jsonify(error="Impossible de confirmer la commande"),500
+ except Exception:
   db.session.rollback()
-  raise click.ClickException("Audit interrompu ; aucune correction enregistrée. Réessayez.") from exc
+  app.logger.exception("Order confirmation failed")
+  return jsonify(error="Impossible de confirmer la commande"),500
 
 with app.app_context():
  db.create_all()
@@ -488,37 +414,4 @@ with app.app_context():
   db.session.add(PromoPack(title="Pack Reta 15 + Cagri",subtitle="Retatrutide 15 mg + Cagrilintide",price=200,image_url="/static/reta15-pack.webp",sort_order=2))
   db.session.add(PromoPack(title="Promo NyxPepz",subtitle="Personnalise cette offre depuis l’Admin",price=0,image_url="/static/ghk.webp",sort_order=3))
   db.session.commit()
-def apply_mobile_catalog_update():
- key="2026-09-29-wolverine-ahk-mobile-v1"
- if db.session.get(CatalogUpdate,key):return False
- try:
-  db.session.add(CatalogUpdate(key=key))
-  db.session.flush()
-  products=Product.query.all()
-  def normalized(name):return "".join(c for c in (name or "").lower() if c.isalnum())
-  for product in products:
-   if normalized(product.name) in ("wolverine","wolverinestack"):
-    product.format="10 mg / 10 mg"
-    product.price=100
-  matches=[p for p in products if normalized(p.name)=="ahkcu"]
-  if matches:
-   for product in matches:
-    product.format="100 mg"
-    product.price=60
-  else:
-   db.session.add(Product(name="AHK-CU",format="100 mg",price=60,
-    category="Beauté · peau",sort_order=100,stock=0,active=True))
-  db.session.commit()
-  return True
- except IntegrityError:
-  db.session.rollback()
-  if db.session.get(CatalogUpdate,key):return False
-  raise
- except SQLAlchemyError:
-  db.session.rollback()
-  raise
-
-with app.app_context():
- apply_mobile_catalog_update()
-
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
