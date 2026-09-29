@@ -218,7 +218,11 @@ h1,h2,h3,.welcome h1,.promo-copy h2{font-weight:750;letter-spacing:-.35px}
 .protocol-products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .protocol-product{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#edf4ff;padding:18px 13px;min-width:0;cursor:pointer;border:1px solid #365279;background:linear-gradient(145deg,#10243ce8,#070f1bea)}
 .protocol-product:hover,.protocol-product:focus-visible{border-color:#74b0ff;background:#132b48;outline-offset:3px}
-.protocol-vial{display:grid;place-items:center;width:48px;height:60px;color:#80bcff;background:#247bff14;border-radius:12px;margin-bottom:13px}.protocol-vial svg{width:32px;height:44px;stroke:currentColor;stroke-width:1.5}
+.protocol-vial{display:flex;align-items:center;justify-content:center;width:100%;height:174px;margin-bottom:13px;background:radial-gradient(ellipse at center,#23599a25,transparent 70%);border-radius:12px}
+.protocol-vial .product-photo{display:flex;align-items:center;justify-content:center;width:100%;height:174px;overflow:hidden;margin:0;background:none}
+.protocol-vial .branded-vial{transform:scale(.79);transform-origin:center}
+.protocol-vial .branded-vial>img{display:block;width:100%;height:100%;max-height:none;max-width:none;object-fit:contain;filter:none}
+.protocol-vial .vial-name{font-size:10px}.protocol-vial .vial-name.long-name{font-size:8.4px}
 .protocol-product-copy{display:flex;flex-direction:column;gap:7px;min-width:0;width:100%}.protocol-product strong{font-size:16px;line-height:1.4;overflow-wrap:anywhere}.protocol-product small{color:#9aafcc;font-size:10px}.protocol-read{color:#89baff;font-size:11px;margin-top:9px}
 .protocol-title{font-size:27px;line-height:1.25;margin:8px 0}.protocol-category{margin:25px 0 10px;line-height:1.6}
 .protocol-source-note{margin:20px 0;padding:14px;border-left:3px solid #528fee;background:#10223b;border-radius:0 12px 12px 0;color:#c0d3ee;font-size:12px;line-height:1.65}.protocol-source-note b{color:#edf5ff}.protocol-source-note p{margin:6px 0 0}

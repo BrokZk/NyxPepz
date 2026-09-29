@@ -38,7 +38,9 @@
   const grid=el('div','protocol-products');
   shown.forEach(entry=>{
    const card=button('','protocol-product card',()=>open(entry,card));card.dataset.protocol=entry.id;
-   const glyph=el('span','protocol-vial');glyph.setAttribute('aria-hidden','true');glyph.innerHTML='<svg viewBox="0 0 40 52" fill="none"><rect x="12" y="3" width="16" height="8" rx="2"/><path d="M14 11v6l-5 5v24a3 3 0 0 0 3 3h16a3 3 0 0 0 3-3V22l-5-5v-6"/><path d="M9 28h22v13H9M16 34h8"/></svg>';
+   const glyph=el('span','protocol-vial');glyph.setAttribute('aria-hidden','true');
+   const parts=entry.title.match(/^(.*?)\s+(\d+(?:[.,]\d+)?(?:\+\d+(?:[.,]\d+)?)?\s*mg)$/i);
+   glyph.innerHTML=vial({name:parts?parts[1]:entry.title,format:parts?parts[2]:''});
    const text=el('span','protocol-product-copy');text.append(el('strong','',entry.title),el('small','','Réf. '+entry.reference),el('span','protocol-read','Consulter la fiche ›'));card.append(glyph,text);grid.append(card);
   });list.append(grid);
  }
