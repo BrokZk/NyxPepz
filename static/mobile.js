@@ -43,9 +43,10 @@
  }
  const canvas=document.getElementById('dnaCanvas');if(!canvas)return;
  const ctx=canvas.getContext('2d');if(!ctx)return;
- const reduced=matchMedia('(prefers-reduced-motion: reduce)');
- let width=358,height=145,frame=0,last=0,angle=.65,visible=true;
- const particles=Array.from({length:27},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.35+(i%4)*.22,speed:.013+(i%5)*.007,phase:i*2.1}));
+ let width=358,height=145,frame=0,last=0,angle=.65;
+ // Continuous decorative motion is the explicitly requested app behavior.
+ document.documentElement.dataset.nyxMotion='on';
+ const particles=Array.from({length:32},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.45+(i%4)*.25,speed:.04+(i%5)*.012,phase:i*2.1}));
  function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const dpr=Math.min(devicePixelRatio||1,2);width=r.width;height=r.height;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
  function draw(){
   ctx.clearRect(0,0,width,height);
@@ -76,9 +77,21 @@
    }
   }
  }
- function tick(time){frame=0;if(document.hidden||!visible||reduced.matches)return;if(time-last>=33){angle+=Math.min(time-last,70)*.00038;last=time;draw();}frame=requestAnimationFrame(tick);}
- function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden&&visible&&!reduced.matches){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
- new ResizeObserver(resize).observe(canvas);
- new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;resume();}).observe(canvas);
- document.addEventListener('visibilitychange',resume);reduced.addEventListener('change',resume);resize();resume();
+ function tick(time){
+  frame=0;if(document.hidden)return;
+  if(time-last>=33){
+   const r=canvas.getBoundingClientRect();
+   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){angle+=Math.min(time-last,70)*.00065;draw();}
+   last=time;
+  }
+  frame=requestAnimationFrame(tick);
+ }
+ function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
+ // Do not depend on intersection callbacks to restart in an embedded browser.
+ if(typeof ResizeObserver==='function')new ResizeObserver(resize).observe(canvas);
+ window.addEventListener('resize',resize);
+ window.addEventListener('pageshow',()=>{resize();resume();});
+ window.addEventListener('focus',resume);
+ document.addEventListener('visibilitychange',resume);
+ resize();resume();
 })();

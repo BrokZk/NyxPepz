@@ -111,3 +111,7 @@ nav button{color:#8291ac}nav button.active{color:#73afff;filter:drop-shadow(0 0 
 @media(prefers-reduced-motion:reduce){.veil-drift{animation:none;transform:none}}
 @media(max-width:350px){.hero-zone{margin-inline:-12px;padding-inline:12px}}
 @media(max-width:350px){.catalog-head{margin-inline:-12px;padding-inline:12px}}
+/* Continuous motion requested for this interface, including reduced-motion environments. */
+html[data-nyx-motion="on"] .veil-drift{animation:sapphireFloat 22s ease-in-out infinite alternate!important}
+html[data-nyx-motion="on"] .veil-drift-low{animation-duration:29s;animation-delay:-11s}
+html[data-nyx-motion="on"] .bg.is-paused .veil-drift{animation-play-state:paused}
