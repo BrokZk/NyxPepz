@@ -50,21 +50,22 @@
  const scene=canvas.closest('.dna-scene');if(backdrop&&scene)backdrop.append(scene);
  const ctx=canvas.getContext('2d');if(!ctx)return;
  let width=390,height=844,frame=0,last=0,angle=.65,elapsed=3;
- const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
- const particles=Array.from({length:32},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.45+(i%4)*.25,speed:.04+(i%5)*.012,phase:i*2.1}));
+ // Continuous decoration while the application is visible, as requested.
+ document.documentElement.dataset.nyxMotion='on';
+ const particles=Array.from({length:48},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.65+(i%4)*.3,speed:.06+(i%5)*.014,phase:i*2.1}));
  function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const dpr=Math.min(devicePixelRatio||1,2);width=r.width;height=r.height;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
  function draw(){
   ctx.clearRect(0,0,width,height);
   // A few drifting points, painted behind the helix in the same capped loop.
-  for(const p of particles){const x=(p.x*width+Math.sin(angle*.9+p.phase)*7),y=((p.y-angle*p.speed)%1+1)%1*height,alpha=.15+.3*(.5+.5*Math.sin(angle+p.phase));ctx.fillStyle=`rgba(128,190,255,${alpha})`;ctx.shadowColor='#468fff';ctx.shadowBlur=p.r> .8?7:0;ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fill();}
+  for(const p of particles){const x=(p.x*width+Math.sin(angle*.9+p.phase)*12),y=((p.y-angle*p.speed)%1+1)%1*height,alpha=.3+.4*(.5+.5*Math.sin(angle+p.phase));ctx.fillStyle=`rgba(153,206,255,${alpha})`;ctx.shadowColor='#468fff';ctx.shadowBlur=p.r> .8?7:0;ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fill();}
   ctx.shadowBlur=0;
   // The helix extends beyond both viewport edges, with no stop behind the logo.
   const objects=[],step=12,rows=Math.ceil((height+240)/step)+1,radius=Math.min(32,width*.075),scale=1;
   // Sparse shooting stars share the same animation loop as the DNA and particles.
-  if(!reducedMotion.matches)for(let n=0;n<2;n++){
-   const t=(elapsed+n*6)%12;if(t>1.4)continue;
-   const progress=t/1.4,cycle=Math.floor((elapsed+n*6)/12),alpha=Math.sin(progress*Math.PI)*.7;
-   const x=width*(.96-progress*.64),y=height*(.08+((cycle+n)%3)*.15)+progress*height*.22;
+  for(let n=0;n<2;n++){
+   const t=(elapsed+n*2.2)%4.4;if(t>2.8)continue;
+   const progress=t/2.8,cycle=Math.floor((elapsed+n*2.2)/4.4),alpha=Math.sin(progress*Math.PI)*.95;
+   const x=width*(1.06-progress*.95),y=height*(.025+((cycle+n)%3)*.025)+progress*height*.12;
    const dx=65,dy=-28,g=ctx.createLinearGradient(x+dx,y+dy,x,y);
    g.addColorStop(0,'rgba(110,177,255,0)');g.addColorStop(1,`rgba(192,226,255,${alpha})`);
    ctx.beginPath();ctx.moveTo(x+dx,y+dy);ctx.lineTo(x,y);ctx.strokeStyle=g;ctx.lineWidth=1.3;ctx.stroke();
@@ -93,21 +94,20 @@
   }
  }
  function tick(time){
-  frame=0;if(document.hidden||reducedMotion.matches)return;
+  frame=0;if(document.hidden)return;
   if(time-last>=33){
    const r=canvas.getBoundingClientRect();
-   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){const dt=Math.min(time-last,70);angle+=dt*.00045;elapsed+=dt*.001;draw();}
+   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){const dt=Math.min(time-last,70);angle+=dt*.0008;elapsed+=dt*.001;draw();}
    last=time;
   }
   frame=requestAnimationFrame(tick);
  }
- function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden&&!reducedMotion.matches){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
+ function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
  // Do not depend on intersection callbacks to restart in an embedded browser.
  if(typeof ResizeObserver==='function')new ResizeObserver(resize).observe(canvas);
  window.addEventListener('resize',resize);
  window.addEventListener('pageshow',()=>{resize();resume();});
  window.addEventListener('focus',resume);
  document.addEventListener('visibilitychange',resume);
- reducedMotion.addEventListener?.('change',resume);
  resize();resume();
 })();

@@ -1,0 +1,353 @@
+{
+  "categories": [
+    {
+      "id": "weight",
+      "label": "Perte de poids",
+      "fullLabel": "Perte de poids et silhouette",
+      "icon": "◌"
+    },
+    {
+      "id": "longevity",
+      "label": "Longévité & énergie",
+      "fullLabel": "Énergie, longévité et vitalité",
+      "icon": "ϟ"
+    },
+    {
+      "id": "skin",
+      "label": "Beauté de la peau",
+      "fullLabel": "Peau, cheveux et beauté",
+      "icon": "✧"
+    },
+    {
+      "id": "recovery",
+      "label": "Récupération",
+      "fullLabel": "Récupération et blessures",
+      "icon": "◇"
+    },
+    {
+      "id": "sleep",
+      "label": "Sommeil & concentration",
+      "fullLabel": "Sommeil, stress et concentration",
+      "icon": "☾"
+    },
+    {
+      "id": "libido",
+      "label": "Libido & bronzage",
+      "fullLabel": "Libido et bronzage",
+      "icon": "☀"
+    }
+  ],
+  "entries": [
+    {
+      "id": "bpc-10",
+      "category": "recovery",
+      "title": "BPC-157 10 mg",
+      "reference": "BPC-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Cible 0,5 mg (10 U)\nMax 1 mg (20 U)",
+      "rhythm": "1x/jour, à heure régulière, pendant la cure",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "tb500-10",
+      "category": "recovery",
+      "title": "TB-500 10 mg",
+      "reference": "TB500-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "1 mg = 20 U\nMicro-dose : 0,25 mg = 5 U",
+      "then": "Monter petit à petit\n(jusqu’à 2,5 mg = 50 U)",
+      "rhythm": "Standard : 2x/semaine (ex. lundi & jeudi)\nMicro-dose : tous les jours",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "wb10",
+      "category": "recovery",
+      "title": "Wolverine 5+5 mg",
+      "reference": "WB10",
+      "mix": "5 mg BPC-157 + 5 mg TB-500 + 2 mL",
+      "concentration": "2,5 mg/mL de chaque",
+      "start": "0,25 mg de chaque = 10 U",
+      "then": "Cible 0,5 mg de chaque (20 U)\nMax 1 mg de chaque (40 U)",
+      "rhythm": "1x/jour, toute la phase de récupération",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "kpv-10",
+      "category": "recovery",
+      "title": "KPV 10 mg",
+      "reference": "KPV-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Max 0,5 mg (10 U), après au moins 1 semaine",
+      "rhythm": "1x/jour, à heure régulière",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "rta-10",
+      "category": "weight",
+      "title": "Retatrutide 10 mg",
+      "reference": "RTA-10",
+      "mix": "10 mg + 1 mL",
+      "concentration": "10 mg/mL",
+      "start": "1 mg = 10 U",
+      "then": "Palier : 2 mg (20 U)\npuis augmentation progressive (toutes les 4 semaines)",
+      "rhythm": "1x/semaine, jour fixe",
+      "aliases": "reta rétatrutide",
+      "sourcePage": 7
+    },
+    {
+      "id": "rta-15",
+      "category": "weight",
+      "title": "Retatrutide 15 mg",
+      "reference": "RTA-15",
+      "mix": "15 mg + 1,5 mL",
+      "concentration": "10 mg/mL",
+      "start": "1 mg = 10 U",
+      "then": "Palier : 2 mg (20 U)\npuis augmentation progressive (toutes les 4 semaines)",
+      "rhythm": "1x/semaine, jour fixe",
+      "aliases": "reta rétatrutide",
+      "sourcePage": 7
+    },
+    {
+      "id": "rta-20",
+      "category": "weight",
+      "title": "Retatrutide 20 mg",
+      "reference": "RTA-20",
+      "mix": "20 mg + 2 mL",
+      "concentration": "10 mg/mL",
+      "start": "1 mg = 10 U",
+      "then": "Palier : 2 mg (20 U)\npuis augmentation progressive (toutes les 4 semaines)",
+      "rhythm": "1x/semaine, jour fixe",
+      "aliases": "reta rétatrutide",
+      "sourcePage": 7
+    },
+    {
+      "id": "rta-30",
+      "category": "weight",
+      "title": "Retatrutide 30 mg",
+      "reference": "RTA-30",
+      "mix": "30 mg + 3 mL",
+      "concentration": "10 mg/mL",
+      "start": "1 mg = 10 U",
+      "then": "Palier : 2 mg (20 U)\npuis augmentation progressive (toutes les 4 semaines)",
+      "rhythm": "1x/semaine, jour fixe",
+      "aliases": "reta rétatrutide",
+      "sourcePage": 7
+    },
+    {
+      "id": "tesa-10",
+      "category": "weight",
+      "title": "Tesamorelin 10 mg",
+      "reference": "TESA-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,5 mg = 10 U",
+      "then": "Max 1 mg (20 U)",
+      "rhythm": "1x/jour, le soir, à jeun",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "ghkcu-50",
+      "category": "skin",
+      "title": "GHK-Cu 50 mg",
+      "reference": "GHKCU-50",
+      "mix": "50 mg + 3 mL",
+      "concentration": "16,7 mg/mL",
+      "start": "2 mg = 12 U",
+      "then": "Fourchette fixe à 2 à 2,5 mg\n(12 à 15 U)",
+      "rhythm": "1x/jour, en continu\n(liquide bleu = normal)",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "glow-70",
+      "category": "skin",
+      "title": "GLOW 70 mg",
+      "reference": "GLOW-70",
+      "mix": "50 mg GHK-Cu + 10 mg TB-500 + 10 mg BPC-157 + 3 mL",
+      "concentration": "",
+      "start": "1 dose fixe = 0,15 mL = 15 U",
+      "then": "= 2,5 mg GHK-Cu + 0,5 mg TB-500 + 0,5 mg BPC-157",
+      "rhythm": "1x/jour, en continu",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "klow-80",
+      "category": "skin",
+      "title": "KLOW 80 mg",
+      "reference": "KLOW-80",
+      "mix": "GLOW + 10 mg KPV + 3 mL",
+      "concentration": "",
+      "start": "1 dose fixe = 0,15 mL = 15 U",
+      "then": "= GLOW + 0,5 mg KPV",
+      "rhythm": "1x/jour, en continu",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "ghkcu-100",
+      "category": "skin",
+      "title": "GHK-Cu 100 mg",
+      "reference": "GHKCU-100",
+      "mix": "100 mg + 3 mL",
+      "concentration": "33,3 mg/mL",
+      "start": "2 mg = 6 U",
+      "then": "Fourchette fixe à 2 à 2,5 mg\n(6 à 7,5 U)",
+      "rhythm": "1x/jour, en continu\n(2x plus concentré que le 50 mg : 7,5 U se lit entre 7 et 8)",
+      "aliases": "",
+      "sourcePage": 7
+    },
+    {
+      "id": "dsip-05",
+      "category": "sleep",
+      "title": "DSIP 5 mg",
+      "reference": "DSIP-05",
+      "mix": "5 mg + 2 mL",
+      "concentration": "2,5 mg/mL",
+      "start": "0,25 mg = 10 U",
+      "then": "Palier 2 : 0,5 mg (20 U), après au moins 1 semaine",
+      "rhythm": "1x/soir, 30 à 60 min avant le coucher",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "cjc-ipa",
+      "category": "sleep",
+      "title": "CJC-IPA 5+5 mg",
+      "reference": "CJC-IPA",
+      "mix": "5 mg CJC-1295 + 5 mg Ipamorelin + 2 mL",
+      "concentration": "2,5 mg/mL de chaque",
+      "start": "0,1 mg de chaque = 4 U",
+      "then": "Max 0,25 mg de chaque (10 U)",
+      "rhythm": "1x/soir, avant de dormir, à jeun",
+      "aliases": "ipamorelin cjc1295",
+      "sourcePage": 8
+    },
+    {
+      "id": "slk-10",
+      "category": "sleep",
+      "title": "Selank 10 mg",
+      "reference": "SLK-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Palier 2 : 0,5 mg (10 U), après au moins 1 semaine",
+      "rhythm": "1x/jour, au besoin ou en continu\n(matin : concentration / soir : détente)",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "semax-10",
+      "category": "sleep",
+      "title": "Semax 10 mg",
+      "reference": "SEMAX-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Max 0,5 mg (10 U)",
+      "rhythm": "Le matin uniquement, chaque jour ou au besoin",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "nad-500",
+      "category": "longevity",
+      "title": "NAD+ 500 mg",
+      "reference": "NAD-500",
+      "mix": "500 mg + 3 mL",
+      "concentration": "166,7 mg/mL",
+      "start": "25 mg = 15 U\n(semaines 1-2)",
+      "then": "50 mg = 30 U (sem. 3-4)\npuis 100 mg = 60 U (sem. 5+)",
+      "rhythm": "2x/semaine, espacées (ex. lundi & jeudi)\nà injecter très lentement",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "mots-10",
+      "category": "longevity",
+      "title": "MOTS-C 10 mg",
+      "reference": "MOTS-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "1 mg = 20 U",
+      "then": "Paliers de +1 mg\nMax 5 mg (100 U)",
+      "rhythm": "1x tous les 2 jours, rythme régulier",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "ept-10",
+      "category": "longevity",
+      "title": "Epitalon 10 mg",
+      "reference": "EPT-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "1 mg = 20 U (dose fixe)",
+      "then": "Pas de montée",
+      "rhythm": "1x/soir pendant 10 jours,\npuis 20 jours de pause\n(cycle = 30 jours)",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "pt141-10",
+      "category": "libido",
+      "title": "PT-141 10 mg",
+      "reference": "PT141-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Max 0,5 mg (10 U)",
+      "rhythm": "Ponctuel : 30 min à 1 h avant\nJamais en continu",
+      "aliases": "",
+      "sourcePage": 8
+    },
+    {
+      "id": "mt2-10",
+      "category": "libido",
+      "title": "MT-2 10 mg",
+      "reference": "MT2-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Max 0,5 mg (10 U)",
+      "rhythm": "30 min avant chaque exposition au soleil",
+      "aliases": "melanotan",
+      "sourcePage": 8
+    },
+    {
+      "id": "mt1-10",
+      "category": "libido",
+      "title": "MT-1 10 mg",
+      "reference": "MT1-10",
+      "mix": "10 mg + 2 mL",
+      "concentration": "5 mg/mL",
+      "start": "0,25 mg = 5 U",
+      "then": "Max 0,5 mg (10 U)",
+      "rhythm": "30 min avant chaque exposition au soleil\n(protocole identique au MT-2)",
+      "aliases": "melanotan",
+      "sourcePage": 8
+    }
+  ],
+  "sources": [
+    {
+      "page": 7,
+      "file": "/static/protocols/recapitulatif-1.png",
+      "title": "Guide NyxPepz · page 7/9"
+    },
+    {
+      "page": 8,
+      "file": "/static/protocols/recapitulatif-2.png",
+      "title": "Guide NyxPepz · page 8/9"
+    }
+  ]
+}
