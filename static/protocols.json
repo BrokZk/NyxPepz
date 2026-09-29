@@ -91,6 +91,30 @@
       "sourcePage": 7
     },
     {
+      "id": "cagri-10",
+      "category": "weight",
+      "title": "Cagrilintide 10 mg",
+      "reference": "CAGRI-10",
+      "aliases": "cagri cagrilintide",
+      "sourceIds": [
+        "cagri-overview",
+        "cagri-table"
+      ],
+      "sourceLabel": "Deux captures fournies · référence de recherche",
+      "notice": "Transcription des captures fournies, sans validation médicale. Le tableau reproduit le groupe cible de 4,5 mg d’un essai de phase 2. Il ne constitue pas un programme personnalisé et n’implique pas une progression systématique jusqu’à 4,5 mg.",
+      "mix": "Fiole de 10 mg préparée à un volume final de 3 mL",
+      "concentration": "Environ 3,33 mg/mL",
+      "start": "Semaines 1 à 2 :\n0,6 mg = 18 unités U-100 = 0,18 mL",
+      "then": "Semaines 3 à 4 :\n1,2 mg = 36 unités = 0,36 mL\n\nSemaines 5 à 6 :\n2,4 mg = 72 unités = 0,72 mL\n\nÀ partir de la semaine 7 dans l’essai de 26 semaines :\n4,5 mg = 135 unités = 1,35 mL",
+      "rhythm": "Une fois par semaine, selon le groupe d’étude décrit dans le document.",
+      "notes": [
+        "L’étude de dosage de phase 2 a évalué des doses cibles multiples allant de 0,3 à 4,5 mg. Ce tableau isole le groupe ciblé publié de 4,5 mg, qui a augmenté à des intervalles de deux semaines ; cela n’implique pas que chaque protocole de recherche doive progresser jusqu’à 4,5 mg.",
+        "La série de 4,5 mg fait 1,35 mL, ce qui dépasse une seringue standard de 1 mL d’U-100. Utilisez un appareil capable de contenir précisément le volume calculé.",
+        "Sur une seringue U-100 :\n1 unité = 0,01 mL ≈ 0,0333 mg (33,3 mcg)",
+        "Lyophilisé : conserver congelé à −20 °C (−4 °F).\nAprès reconstitution : réfrigérez à 2–8 °C (35,6–46,4 °F) et suivez exactement les informations d’utilisation indiquées ou validées de la préparation."
+      ]
+    },
+    {
       "id": "rta-10",
       "category": "weight",
       "title": "Retatrutide 10 mg",
@@ -348,6 +372,16 @@
       "page": 8,
       "file": "/static/protocols/recapitulatif-2.png",
       "title": "Guide NyxPepz · page 8/9"
+    },
+    {
+      "id": "cagri-overview",
+      "file": "/static/protocols/cagrilintide-apercu.png",
+      "title": "Cagrilintide · présentation fournie"
+    },
+    {
+      "id": "cagri-table",
+      "file": "/static/protocols/cagrilintide-tableau.png",
+      "title": "Cagrilintide · tableau de recherche fourni"
     }
   ]
 }
