@@ -206,6 +206,7 @@ def admin_delete_user(uid):
         shop["Loyalty"].query.filter_by(user_id=uid).delete()
         JournalEntry.query.filter_by(user_id=uid).delete()
         nutrition['purge_user'](uid)
+        giveaways['purge_user'](uid)
         db.session.delete(u)
         db.session.commit()
     except SQLAlchemyError:
@@ -461,6 +462,12 @@ def reconcile_referrals(repair):
 
 from shop import install_shop
 shop = install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent, current_user, require_admin, pack_shop)
+from giveaways import install_giveaways
+def giveaway_customer_eligible(uid):
+ return bool(ConfirmedOrderEvent.query.filter_by(user_id=uid).first() or shop['Order'].query.filter(shop['Order'].user_id==uid,shop['Order'].status.in_(['paid','shipped','available','delivered'])).first())
+giveaways=install_giveaways(app,db,User,Product,current_user,require_admin,customer_eligible=giveaway_customer_eligible)
+from giveaway_delivery import install_giveaway_delivery
+install_giveaway_delivery(app,db,giveaways)
 from shop_delivery import install_delivery
 install_delivery(app, db, User, shop)
 from shop_inventory import install_inventory

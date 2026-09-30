@@ -217,6 +217,14 @@ def install_delivery(app, db, User, shop):
         while not stop.is_set():
             shop['expire']()
             count = run_jobs()
+            giveaway_dispatch = app.extensions.get('nyx_giveaway_delivery', {}).get('run_jobs')
+            if giveaway_dispatch:
+                try:
+                    count += giveaway_dispatch()
+                except Exception:
+                    # Keep shop notifications running if the giveaway queue is unavailable.
+                    db.session.rollback()
+                    app.logger.warning('Envoi des résultats du concours temporairement indisponible')
             if loop:
                 launcher_tick()
             if not loop:
