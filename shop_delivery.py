@@ -4,6 +4,7 @@ The worker is an explicit server command, never a browser-triggered side effect.
 """
 import json
 import os
+import re
 import secrets
 import time
 from urllib.parse import quote
@@ -89,23 +90,63 @@ def install_delivery(app, db, User, shop):
         event = job.kind.split('_', 1)[1]
         messages = {"created": "Nouvelle commande reçue — en attente de paiement", "paid": "Commande payée et validée",
                     "shipped": "Votre colis a été expédié", "available": "Votre colis est disponible au point de retrait / locker",
-                    "delivered": "Colis livré", "expired": "Réservation expirée", "cancelled": "Commande annulée"}
+                    "delivered": "Colis livré", "expired": "Réservation expirée", "cancelled": "Commande annulée",
+                    "payment_help": "Autre moyen de paiement demandé"}
         heading = messages.get(event, "Paiement reçu — montant à vérifier" if event.startswith('payment_received') else event)
         if customer and event == "created":
             heading = "Votre commande est enregistrée — paiement en attente"
+        if event == "payment_help":
+            # Delivery may happen after payment, cancellation or expiry. Describe
+            # the current order without suggesting that this old request renews
+            # a reservation or reverses a payment already validated.
+            help_status = {
+                "awaiting_payment": "À recontacter — paiement non confirmé",
+                "payment_review": "À recontacter — paiement reçu, validation en attente",
+                "expired": "Réservation expirée — aucune réservation active",
+                "cancelled": "Commande annulée — aucune réservation active",
+            }.get(order.status, "Demande de contact enregistrée — statut à vérifier")
+            if order.status in ("paid", "shipped", "available", "delivered"):
+                help_status = "Demande antérieure — paiement validé depuis"
+            heading += "\n" + help_status
         text = f"{heading}\n{order.reference}\nTotal : {order.total_cents / 100:.2f} €"
+        contact_url = None
+        contact_details = None
+        if not customer:
+            user = db.session.get(User, order.user_id)
+            username = user.username if user and isinstance(user.username, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", user.username) else None
+            text += '\nClient : ' + order.contact['first_name'] + ' ' + order.contact['last_name']
+            if username:
+                text += ' (@' + username + ')'
+            contact_details = '\nTéléphone : ' + order.contact['phone'] + '\nEmail : ' + order.contact['email']
+            if user:
+                contact_details += '\nTelegram ID : ' + str(user.telegram_id)
+                contact_url = 'https://t.me/' + username if username else 'tg://user?id=' + str(user.telegram_id)
+            if event == "payment_help":
+                # Put contact details before long baskets so they remain visible.
+                text += contact_details
         text += '\n' + '\n'.join(f"{x['quantity']} × {x['name']} {x['format']}" for x in order.lines)
         if order.tracking_number:
             text += '\nNuméro de suivi : ' + order.tracking_number
         payload = {"chat_id": job.recipient, "text": text[:3900]}
-        if not customer:
-            user = db.session.get(User, order.user_id)
-            text += '\nClient : ' + order.contact['first_name'] + ' ' + order.contact['last_name']
-            if user.username:
-                text += ' (@' + user.username + ')'
-            payload["text"] = text[:3900]
-            payload["reply_markup"] = {"inline_keyboard": [[{"text": "Contacter le client", "url": 'https://t.me/' + user.username if user.username else 'tg://user?id=' + str(user.telegram_id)}]]}
+        if contact_url:
+            payload["reply_markup"] = {"inline_keyboard": [[{"text": "Contacter le client", "url": contact_url}]]}
         response = requests.post('https://api.telegram.org/bot' + token + '/sendMessage', json=payload, timeout=20)
+        if contact_url and contact_url.startswith('tg://') and response.status_code == 400:
+            try:
+                description = str(response.json().get('description', '')).lower()
+            except (ValueError, AttributeError):
+                description = ''
+            rejected_contact = any(reason in description for reason in (
+                'button_user_invalid', 'entity_mention_user_invalid', 'button_url_invalid', 'user not found'
+            )) or ('button' in description and ('url' in description or 'user' in description))
+            if rejected_contact:
+                # Some Telegram profiles cannot be linked by ID. A rejected
+                # request sent nothing, so retry once without the contact button.
+                # Keep phone/email available; errors are handled by the outbox.
+                fallback = {key: value for key, value in payload.items() if key != 'reply_markup'}
+                if event != 'payment_help':
+                    fallback['text'] = text[:3900 - len(contact_details)] + contact_details
+                response = requests.post('https://api.telegram.org/bot' + token + '/sendMessage', json=fallback, timeout=20)
         if customer and response.status_code == 403:
             # Customer blocked the bot or has not granted write access. Do not
             # retry forever; the order remains available in their app profile.

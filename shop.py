@@ -109,6 +109,29 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
     def enabled():
         return os.environ.get("SHOP_ENABLED") == "1"
 
+    def admin_recipients():
+        # Telegram user IDs are positive integers. Normalize duplicates before
+        # constructing durable keys, including configuration with leading zeros.
+        recipients = set()
+        for value in os.environ.get("ADMIN_TELEGRAM_IDS", "").split(","):
+            value = value.strip()
+            if re.fullmatch(r"[0-9]{1,16}", value) and 0 < int(value) < 2 ** 52:
+                recipients.add(str(int(value)))
+        return sorted(recipients)
+
+    def payment_help_available():
+        return enabled() and bool(admin_recipients())
+
+    def payment_help_requested(order):
+        # Keep this history after successful delivery, cancellation or expiry.
+        return ShopOutbox.query.filter_by(order_id=order.id, kind="telegram_payment_help").first() is not None
+
+    @app.after_request
+    def private_shop_response(response):
+        if request.path.startswith('/api/shop/') and request.path not in ('/api/shop/config', '/api/shop/paygate/callback'):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+
     def policy():
         return "euro1"
 
@@ -120,6 +143,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     def config():
         return {"enabled": enabled(), "payment_enabled": bool(paygate_ready()),
+                "payment_help_available": payment_help_available(),
                 "countries": [{"code": k, "name": COUNTRIES[k], "shipping_cents": v} for k, v in SHIPPING.items()],
                 "loyalty_policy": policy(), "reward_configured": True,
                 "rewards": [{"points": p, "discount_cents": v} for p, v in REWARDS.items()],
@@ -127,6 +151,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "payment_notice": "Le paiement s’ouvre chez PayGate. Les éventuels frais du prestataire y sont affichés."}
 
     def serialize(order, admin=False):
+        requested_help = payment_help_requested(order)
+        awaiting_payment = order.status == "awaiting_payment" and order.expires_at > int(time.time())
         data = {"reference": order.reference, "lines": order.lines,
                 "subtotal_cents": order.subtotal_cents, "shipping_cents": order.shipping_cents,
                 "total_cents": order.total_cents, "status": order.status,
@@ -134,7 +160,9 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "status_label": STATUSES.get(order.status, order.status), "created_at": order.created_at,
                 "expires_at": order.expires_at, "points": order.points,
                 "country": order.contact["country"], "tracking_number": order.tracking_number,
-                "can_pay": order.status == "awaiting_payment" and order.expires_at > int(time.time()) and bool(paygate_ready())}
+                "can_pay": awaiting_payment and bool(paygate_ready()),
+                "payment_help_requested": requested_help,
+                "can_request_payment_help": awaiting_payment and payment_help_available() and not requested_help}
         if admin:
             owner = db.session.get(User, order.user_id)
             data.update(contact=order.contact, telegram_id=owner.telegram_id if owner else None,
@@ -228,10 +256,10 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         result["quote_hash"] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
         return result
 
-    def enqueue(order, event):
+    def enqueue(order, event, recipients=None):
         # One durable entry per event and destination; workers never recreate orders.
-        destinations = [("sheets", "")]
-        destinations += [("telegram_" + event, value.strip()) for value in os.environ.get("ADMIN_TELEGRAM_IDS", "").split(",") if value.strip().isdigit()]
+        destinations = [] if event == "payment_help" else [("sheets", "")]
+        destinations += [("telegram_" + event, recipient) for recipient in (admin_recipients() if recipients is None else recipients)]
         if event in ("created", "paid", "shipped", "available", "delivered"):
             user = db.session.get(User, order.user_id)
             if user:
@@ -291,11 +319,12 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         user = current_user()
         if not user:
             return fail("Ouvrez l’application depuis Telegram", 401)
-        if not enabled() or not paygate_ready() or policy() == "pending":
-            return fail("Les commandes en ligne sont en cours de préparation", 503)
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return fail("Commande invalide")
+        payment_choice = payload.get("payment_choice", "paygate")
+        if payment_choice not in ("paygate", "contact"):
+            return fail("Choix de paiement invalide")
         key = request.headers.get("Idempotency-Key", "")
         if not re.fullmatch(r"[a-zA-Z0-9_-]{16,64}", key):
             return fail("Identifiant de validation manquant")
@@ -308,7 +337,13 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             if previous:
                 if previous.request_hash != digest:
                     return fail("Cette validation correspond à un autre panier", 409)
+                db.session.commit()
                 return jsonify(order=serialize(previous), duplicate=True)
+            if not enabled() or policy() == "pending" or (payment_choice == "paygate" and not paygate_ready()):
+                return fail("Les commandes en ligne sont en cours de préparation", 503)
+            recipients = admin_recipients()
+            if payment_choice == "contact" and not recipients:
+                return fail("La demande de rappel est momentanément indisponible", 503)
             if ShopOrder.query.filter_by(user_id=user.id, status="awaiting_payment").count() >= 3:
                 return fail("Terminez ou annulez vos commandes en attente", 409)
             contact = parse_contact(payload.get("contact"))
@@ -359,7 +394,9 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 db.session.add(ShopProfile(user_id=user.id, contact=contact))
             db.session.flush()
             ambassadors['attach'](order, ambassador)
-            enqueue(order, "created")
+            enqueue(order, "created", recipients)
+            if payment_choice == "contact":
+                enqueue(order, "payment_help", recipients)
             db.session.commit()
             return jsonify(order=serialize(order)), 201
         except ValueError as exc:
@@ -393,6 +430,35 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return jsonify(order=serialize(order))
         except SQLAlchemyError:
             return fail("Annulation indisponible", 503)
+
+    @app.post("/api/shop/orders/<reference>/payment-help")
+    def request_payment_help(reference):
+        user = current_user()
+        if not user:
+            return fail("Non authentifié", 401)
+        try:
+            # Lock the owned order before reading its state or notification
+            # history. This serializes concurrent help, payment and cancellation
+            # requests on PostgreSQL and SQLite; a unique event key is the backstop.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference, ShopOrder.user_id == user.id
+            ).values(status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference, user_id=user.id).populate_existing().one()
+            if payment_help_requested(order):
+                db.session.commit()
+                return jsonify(order=serialize(order), duplicate=True)
+            if order.status != "awaiting_payment" or order.expires_at <= int(time.time()):
+                return fail("Cette commande n’est plus en attente de paiement", 409)
+            recipients = admin_recipients()
+            if not enabled() or not recipients:
+                return fail("La demande de rappel est momentanément indisponible", 503)
+            enqueue(order, "payment_help", recipients)
+            db.session.commit()
+            return jsonify(order=serialize(order))
+        except SQLAlchemyError:
+            return fail("Impossible d’enregistrer la demande de rappel. Réessayez.", 503)
 
     @app.post("/api/shop/orders/<reference>/pay")
     def payment_link(reference):

@@ -1,7 +1,7 @@
 /* Commerce UI. The server owns prices, rewards, stock and payment state. */
 (()=>{
  const money=c=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format((c||0)/100);
- let settings=null,cart=[],cartOwner=null,lastQuote=null,checkoutKey=null,checkoutPayload=null,busy=false;
+ let settings=null,cart=[],cartOwner=null,lastQuote=null,checkoutKey=null,checkoutPayload=null,checkoutChoice=null,busy=false;
  const originalGo=go,originalRender=renderCatalog;
  const statusText={awaiting_payment:'En attente de paiement',payment_review:'Paiement reçu — vérification',paid:'Payée',shipped:'Expédiée',available:'Disponible au point de retrait',delivered:'Livrée',cancelled:'Annulée',expired:'Réservation expirée'};
  const $id=id=>document.getElementById(id);
@@ -12,7 +12,7 @@
  }
  function saveCart(){
   if(cartOwner)try{localStorage.setItem('nyx-cart-'+cartOwner,JSON.stringify(cart));}catch{}
-  lastQuote=null;checkoutKey=null;checkoutPayload=null;updateBadge();
+  lastQuote=null;checkoutKey=null;checkoutPayload=null;checkoutChoice=null;updateBadge();
  }
  function updateBadge(){const count=cart.reduce((sum,x)=>sum+x.quantity,0);$id('cartCount').textContent=count||'';$id('cartCount').hidden=!count;}
  function updateLoyalty(){
@@ -38,6 +38,24 @@
  go=function(id){originalGo(id);if(id==='cart'){loadCart();renderCart();loadCheckoutProfile();}if(id==='loyalty'){freshAccount();updateLoyalty();}if(id==='orders'||id==='parcels')loadOrders(id);if(id==='admin')loadAdminOrders();};
  function linesHTML(lines){return lines.map(x=>`<div class="checkout-line"><span><b>${escapeHTML(x.name)}</b><small>${escapeHTML(x.format||'')} · Quantité ${x.quantity}</small></span><strong>${money(x.line_cents)}</strong></div>`).join('');}
  function summaryHTML(q){return `<div class="total-row"><span>Produits</span><b>${money(q.subtotal_cents)}</b></div>${q.discount_cents?`<div class="total-row reward-saving"><span>Récompense (${q.reward_points} points)</span><b>− ${money(q.discount_cents)}</b></div>`:''}<div class="total-row"><span>Livraison</span><b>${money(q.shipping_cents)}</b></div><div class="total-row grand-total"><span>Total à payer</span><strong>${money(q.total_cents)}</strong></div>`;}
+ function paymentGuideHTML(expanded=false){return `<details class="payment-guide" ${expanded?'open':''}><summary>Comment payer avec PayGate ?</summary><p class="payment-intro">Votre paiement par carte passe par un prestataire externe qui le convertit en cryptomonnaie pour régler la commande.</p><ol class="payment-steps"><li><b>Ouvrez PayGate</b><span>Vérifiez le montant de votre commande en euros.</span></li><li><b>Choisissez votre prestataire</b><span>Si Coinbase est proposé et que vous avez déjà un compte vérifié, il peut être pratique. Banxa est une autre option lorsqu’il apparaît. Comparez les frais et le total affichés.</span></li><li><b>Connectez-vous ou renseignez vos coordonnées</b><span>Avec Coinbase, connectez-vous ou créez votre compte. Avec Banxa, suivez les étapes et renseignez les informations demandées.</span></li><li><b>Vérifiez votre identité (KYC)</b><span>Suivez les instructions du prestataire si une vérification est demandée : pièce d’identité et, parfois, selfie. Ces documents se transmettent uniquement sur son site.</span></li><li><b>Payez avec votre carte personnelle</b><span>Vérifiez le montant final, confirmez le paiement et validez la demande de votre banque si elle apparaît. Revenez ensuite dans « Mes commandes » pour suivre la validation.</span></li></ol><p class="payment-footnote">Les options et les frais dépendent notamment du pays, du montant et du prestataire. Une commande est payée après réception et validation du paiement.</p><div class="payment-sources"><a href="https://help.coinbase.com/en/coinbase/trading-and-funding/coinbase-pay/using-onramp" target="_blank" rel="noopener noreferrer">Aide Coinbase ↗</a><a href="https://support.banxa.com/en/support/solutions/articles/44002201291-banxa-customer-journey" target="_blank" rel="noopener noreferrer">Aide Banxa ↗</a></div></details>`;}
+ function updatePaymentChoices(){
+  $id('confirmOrder').disabled=busy||!(settings?.enabled&&settings?.payment_enabled)||(checkoutChoice!==null&&checkoutChoice!=='paygate');
+  $id('requestOtherPayment').disabled=busy||!(settings?.enabled&&settings?.payment_help_available)||(checkoutChoice!==null&&checkoutChoice!=='contact');
+  $id('otherPaymentNotice').textContent=settings?.payment_help_available?'Enregistrez votre commande et demandez à être recontacté sur Telegram ou avec vos coordonnées. Aucun paiement n’est effectué par ce bouton.':'La demande de contact est momentanément indisponible.';
+ }
+ function paymentHelpHTML(order){
+  if(!order.payment_help_requested)return '';
+  return `<div class="payment-help-status" role="status"><b>Autre moyen de paiement demandé</b><span>${order.status==='awaiting_payment'?'Votre demande est enregistrée. NyxPepz vous recontactera sur Telegram ou avec les coordonnées de votre commande. Le paiement reste à effectuer.':'Une demande de contact a été enregistrée pour cette commande.'}</span></div>`;
+ }
+ function adminPaymentHelpHTML(order){
+  if(!order.payment_help_requested)return '';
+  const username=typeof order.username==='string'&&/^[A-Za-z0-9_]{5,32}$/.test(order.username)?order.username:null;
+  const id=String(order.telegram_id||'');
+  const contactURL=username?'https://t.me/'+username:/^[0-9]+$/.test(id)?'tg://user?id='+id:null;
+  return `<div class="payment-help-status"><b>Autre moyen de paiement demandé</b><span>${order.status==='awaiting_payment'?'Client à recontacter · paiement en attente.':'Demande de contact enregistrée.'}</span>${contactURL?`<a class="shop-secondary" href="${contactURL}" target="_blank" rel="noopener noreferrer">Contacter le client sur Telegram ↗</a>`:''}</div>`;
+ }
+ $id('checkoutPaymentGuide').innerHTML=paymentGuideHTML(true);
  function renderCart(){
   updateBadge();$id('checkoutReview').hidden=true;$id('checkoutForm').hidden=!cart.length;$id('cartList').innerHTML='';
   if(!cart.length){$id('cartList').innerHTML='<div class="card pad empty-state">Votre panier est vide.<button class="shop-primary" id="startShopping">Découvrir la boutique</button></div>';$id('startShopping').onclick=()=>go('catalog');return;}
@@ -61,29 +79,38 @@
    const reward=Number($id('checkoutReward').value);
    lastQuote=await api('/api/shop/quote',{method:'POST',body:JSON.stringify({items:cart,country:contact.country,reward_points:reward})});
    const payload={items:cart.map(x=>({...x})),contact,referral_code:$id('checkoutReferral').disabled?'':$id('checkoutReferral').value.trim(),ambassador_code:$id('checkoutAmbassador').value.trim(),reward_points:reward,quote_hash:lastQuote.quote_hash};
-   if(JSON.stringify(payload)!==JSON.stringify(checkoutPayload)){checkoutKey=crypto.randomUUID();checkoutPayload=payload;}
+   if(JSON.stringify(payload)!==JSON.stringify(checkoutPayload)){checkoutKey=crypto.randomUUID();checkoutPayload=payload;checkoutChoice=null;}
    $id('reviewContent').innerHTML=linesHTML(lastQuote.lines)+summaryHTML(lastQuote)+`<p class="delivery-summary">${escapeHTML(contact.first_name)} ${escapeHTML(contact.last_name)}<br>${escapeHTML(contact.address)}<br>${escapeHTML(contact.postal_code)} ${escapeHTML(contact.city)} · ${escapeHTML(contact.country)}</p>`;
-   $id('checkoutReview').hidden=false;$id('confirmOrder').disabled=!(settings?.enabled&&settings?.payment_enabled);$id('reviewNotice').textContent=settings?.enabled&&settings?.payment_enabled?'Votre commande sera réservée pendant une heure. Les points seront crédités après validation du paiement.':'Les commandes et le paiement ne sont pas encore ouverts.';$id('checkoutReview').scrollIntoView({behavior:'smooth',block:'start'});
-  }catch(e){toast(e.message);}finally{busy=false;$id('reviewOrder').disabled=false;}
+   $id('checkoutReview').hidden=false;$id('reviewNotice').textContent=settings?.enabled?'Votre commande sera réservée pendant une heure, quel que soit votre choix. Les points seront crédités après validation du paiement.':'Les commandes ne sont pas encore ouvertes.';$id('checkoutReview').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){toast(e.message);}finally{busy=false;$id('reviewOrder').disabled=false;updatePaymentChoices();}
  });
  async function openPayment(reference){
   const result=await api('/api/shop/orders/'+encodeURIComponent(reference)+'/pay',{method:'POST',body:'{}'});
   const link=new URL(result.url);if(link.protocol!=='https:'||link.hostname!=='checkout.paygate.to')throw Error('Lien de paiement non reconnu');
   if(tg?.openLink)tg.openLink(link.href);else location.assign(link.href);
  }
- $id('confirmOrder').onclick=async()=>{
-  if(busy||!lastQuote||!checkoutPayload)return;busy=true;$id('confirmOrder').disabled=true;
+ async function confirmCheckout(choice){
+  if(busy||!lastQuote||!checkoutPayload)return;
+  if(checkoutChoice&&checkoutChoice!==choice){toast('Réessayez avec le même choix ou consultez Mes commandes pour retrouver votre demande.');return;}
+  checkoutChoice=choice;busy=true;updatePaymentChoices();
   try{
-   const data=await api('/api/shop/orders',{method:'POST',headers:{'Idempotency-Key':checkoutKey},body:JSON.stringify(checkoutPayload)});
+   const data=await api('/api/shop/orders',{method:'POST',headers:{'Idempotency-Key':checkoutKey},body:JSON.stringify({...checkoutPayload,payment_choice:choice})});
    cart=[];saveCart();await freshAccount();go('orders');
+   if(choice==='contact'){toast('Demande enregistrée. NyxPepz vous recontactera pour le paiement.');return;}
    if(tg?.requestWriteAccess&&!tg?.initDataUnsafe?.user?.allows_write_to_pm)await new Promise(resolve=>tg.requestWriteAccess(()=>resolve()));
    try{await openPayment(data.order.reference);}catch(e){toast(e.message+' Vous pouvez reprendre le paiement dans Mes commandes.');}
-  }catch(e){toast(e.message);}finally{busy=false;$id('confirmOrder').disabled=false;}
- };
+  }catch(e){toast(e.message);}finally{busy=false;updatePaymentChoices();}
+ }
+ $id('confirmOrder').onclick=()=>confirmCheckout('paygate');
+ $id('requestOtherPayment').onclick=()=>confirmCheckout('contact');
  async function loadOrders(page='orders'){
   const target=$id(page==='parcels'?'parcelOrders':'orderList');target.innerHTML='<p class="empty-state">Chargement…</p>';
   try{let orders=await api('/api/shop/orders');if(page==='parcels')orders=orders.filter(o=>o.tracking_number);target.innerHTML=orders.length?'':'<div class="card pad empty-state">'+(page==='parcels'?'Aucun colis expédié pour le moment.':'Vous n’avez pas encore de commande.')+'</div>';
    for(const o of orders){const el=document.createElement('article');el.className='order-card card';el.innerHTML=`<small>${escapeHTML(o.reference)}</small><h2>${escapeHTML(o.status_label)}</h2>${linesHTML(o.lines)}${summaryHTML(o)}${o.tracking_number?`<p>Suivi : <b>${escapeHTML(o.tracking_number)}</b></p><a target="_blank" rel="noopener" href="https://www.mondialrelay.fr/suivi-de-colis/">Ouvrir le suivi Mondial Relay ↗</a>`:''}<div class="order-actions">${o.can_pay?'<button class="shop-primary" data-pay>Reprendre le paiement</button>':''}${o.status==='awaiting_payment'?'<button class="shop-secondary" data-cancel>Annuler la commande</button>':''}</div>`;
+    const actions=el.querySelector('.order-actions');
+    if(o.status==='awaiting_payment'&&Number.isFinite(o.expires_at)){const expiry=document.createElement('p');expiry.className='shop-notice';expiry.textContent='Articles réservés jusqu’au '+new Intl.DateTimeFormat('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(o.expires_at*1000))+'.';actions.before(expiry);}
+    const assistance=document.createElement('div');assistance.innerHTML=paymentHelpHTML(o)+(o.can_pay?paymentGuideHTML():'');actions.before(assistance);
+    if(o.can_request_payment_help){const help=document.createElement('button');help.type='button';help.className='shop-secondary';help.textContent='Demander un autre moyen de paiement';help.dataset.paymentHelp='';actions.prepend(help);help.onclick=async()=>{help.disabled=true;try{await api('/api/shop/orders/'+encodeURIComponent(o.reference)+'/payment-help',{method:'POST',body:'{}'});await loadOrders(page);toast('Demande enregistrée. NyxPepz vous recontactera.');}catch(e){toast(e.message);}finally{help.disabled=false;}};}
     if(el.querySelector('[data-pay]'))el.querySelector('[data-pay]').onclick=async e=>{e.target.disabled=true;try{await openPayment(o.reference);}catch(err){toast(err.message);}finally{e.target.disabled=false;}};
     if(el.querySelector('[data-cancel]'))el.querySelector('[data-cancel]').onclick=async()=>{if(!confirm('Annuler cette commande en attente ?'))return;try{await api('/api/shop/orders/'+encodeURIComponent(o.reference)+'/cancel',{method:'POST',body:'{}'});await freshAccount();loadOrders(page);}catch(e){toast(e.message);}};target.append(el);
    }
@@ -103,6 +130,7 @@
   olderButton.hidden=true;
   const target=$id('adminShopOrders');if(!append){adminCursor=null;target.innerHTML='<p>Chargement des commandes…</p>';} 
   try{const data=await api('/api/shop/admin/orders?group='+adminGroup+(append&&adminCursor?'&before='+adminCursor:''));if(requestId!==adminRequest)return;const orders=Array.isArray(data)?data:data.orders;adminCursor=data.next_before;olderButton.hidden=!adminCursor;if(!append)target.innerHTML=orders.length?'':'<p>Aucune commande dans cette rubrique.</p>';for(const o of orders){const el=document.createElement('article');el.className='order-card';el.innerHTML=`<small>${escapeHTML(o.reference)}</small><h3>${escapeHTML(o.status_label)} · ${money(o.total_cents)}</h3><p>${escapeHTML(o.contact.first_name)} ${escapeHTML(o.contact.last_name)} ${o.username?'(@'+escapeHTML(o.username)+')':''}<br>${escapeHTML(o.contact.email)} · ${escapeHTML(o.contact.phone)}<br>${escapeHTML(o.contact.address)} ${escapeHTML(o.contact.address_extra)}<br>${escapeHTML(o.contact.postal_code)} ${escapeHTML(o.contact.city)} ${escapeHTML(o.contact.country)}</p>${linesHTML(o.lines)}${summaryHTML(o)}<small>${o.sync_pending} envoi(s) en attente</small>${o.payments.map(x=>`<p class="payment-evidence">Reçu : ${escapeHTML(x.amount)} ${escapeHTML(x.coin)}<br>Versé : ${escapeHTML(x.forwarded_amount)}<br>Transaction : ${escapeHTML(x.transaction_id)}</p>`).join('')}${o.status==='payment_review'?'<button data-confirm class="shop-primary">Vérifier et valider le paiement</button>':''}${['paid','shipped','available'].includes(o.status)?'<button data-shipping class="shop-secondary">Mettre à jour la livraison</button>':''}`;
+   if(o.payment_help_requested){const help=document.createElement('div');help.innerHTML=adminPaymentHelpHTML(o);el.querySelector('h3').after(help);}
    if(el.querySelector('[data-confirm]'))el.querySelector('[data-confirm]').onclick=async()=>{const total=prompt('Après vérification chez PayGate, quel montant total le client a-t-il payé en EUR ?');if(total===null)return;const note=prompt('Référence de votre vérification du paiement :');if(!note)return;try{await api('/api/shop/admin/orders/'+encodeURIComponent(o.reference)+'/confirm-payment',{method:'POST',body:JSON.stringify({confirmed_total_cents:Math.round(Number(total.replace(',','.'))*100),note})});toast('Paiement validé');loadAdminOrders();}catch(e){toast(e.message);}};
    if(el.querySelector('[data-shipping]'))el.querySelector('[data-shipping]').onclick=async()=>{const tracking=prompt('Numéro Mondial Relay :',o.tracking_number||'');if(!tracking)return;const status=prompt('Statut : shipped (expédié), available (disponible au retrait), delivered (livré)',o.status==='paid'?'shipped':o.status==='shipped'?'available':'delivered');if(!status)return;try{await api('/api/shop/admin/orders/'+encodeURIComponent(o.reference)+'/shipping',{method:'POST',body:JSON.stringify({tracking_number:tracking,status})});loadAdminOrders();}catch(e){toast(e.message);}};target.append(el);}
   }catch(e){target.textContent=e.message;}
@@ -111,5 +139,5 @@
  $id('allowNotifications').onclick=()=>{if(tg?.requestWriteAccess)tg.requestWriteAccess(allowed=>toast(allowed?'Notifications Telegram autorisées':'Vous pouvez consulter les nouvelles dans Mes commandes.'));else toast('Ouvrez une conversation avec le bot dans Telegram pour recevoir ses messages.');};
  const loyal=document.querySelector('.loyal');loyal.setAttribute('role','button');loyal.tabIndex=0;loyal.setAttribute('aria-label','Voir mes points et mes récompenses');loyal.onclick=()=>go('loyalty');loyal.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go('loyalty');}};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$id('orders').classList.contains('active'))loadOrders();});
- api('/api/shop/config').then(data=>{settings=data;updateLoyalty();$id('checkoutNotice').textContent=data.enabled?'':'La prise de commande est en préparation. Vous pouvez préparer votre panier.';}).catch(()=>{$id('checkoutNotice').textContent='Le service commande est indisponible pour le moment.';});
+ api('/api/shop/config').then(data=>{settings=data;updateLoyalty();updatePaymentChoices();$id('checkoutNotice').textContent=data.enabled?'':'La prise de commande est en préparation. Vous pouvez préparer votre panier.';}).catch(()=>{$id('checkoutNotice').textContent='Le service commande est indisponible pour le moment.';updatePaymentChoices();});
 })();
