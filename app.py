@@ -195,10 +195,11 @@ def admin_delete_user(uid):
                 | (ReferralOrderEvent.referrer_user_id == uid)).first()
             or ConfirmedOrderEvent.query.filter_by(user_id=uid).first()
             or shop["Order"].query.filter_by(user_id=uid).first()
+            or app.extensions['nyx_ambassadors']['linked'](uid)
         )
         if linked:
             db.session.rollback()
-            return jsonify(error="Suppression impossible : compte lié à un parrainage ou à des commandes"), 409
+            return jsonify(error="Suppression impossible : compte lié à un parrainage, à des commandes ou à un espace ambassadeur"), 409
         shop["Profile"].query.filter_by(user_id=uid).delete()
         shop["Loyalty"].query.filter_by(user_id=uid).delete()
         JournalEntry.query.filter_by(user_id=uid).delete()

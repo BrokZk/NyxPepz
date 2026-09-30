@@ -60,7 +60,7 @@
    const form=$id('checkoutForm'),contact=Object.fromEntries(new FormData(form));delete contact.referral_code;delete contact.reward_points;
    const reward=Number($id('checkoutReward').value);
    lastQuote=await api('/api/shop/quote',{method:'POST',body:JSON.stringify({items:cart,country:contact.country,reward_points:reward})});
-   const payload={items:cart.map(x=>({...x})),contact,referral_code:$id('checkoutReferral').disabled?'':$id('checkoutReferral').value.trim(),reward_points:reward,quote_hash:lastQuote.quote_hash};
+   const payload={items:cart.map(x=>({...x})),contact,referral_code:$id('checkoutReferral').disabled?'':$id('checkoutReferral').value.trim(),ambassador_code:$id('checkoutAmbassador').value.trim(),reward_points:reward,quote_hash:lastQuote.quote_hash};
    if(JSON.stringify(payload)!==JSON.stringify(checkoutPayload)){checkoutKey=crypto.randomUUID();checkoutPayload=payload;}
    $id('reviewContent').innerHTML=linesHTML(lastQuote.lines)+summaryHTML(lastQuote)+`<p class="delivery-summary">${escapeHTML(contact.first_name)} ${escapeHTML(contact.last_name)}<br>${escapeHTML(contact.address)}<br>${escapeHTML(contact.postal_code)} ${escapeHTML(contact.city)} · ${escapeHTML(contact.country)}</p>`;
    $id('checkoutReview').hidden=false;$id('confirmOrder').disabled=!(settings?.enabled&&settings?.payment_enabled);$id('reviewNotice').textContent=settings?.enabled&&settings?.payment_enabled?'Votre commande sera réservée pendant une heure. Les points seront crédités après validation du paiement.':'Les commandes et le paiement ne sont pas encore ouverts.';$id('checkoutReview').scrollIntoView({behavior:'smooth',block:'start'});

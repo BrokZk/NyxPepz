@@ -91,6 +91,9 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         lease_token = db.Column(db.String(48))
         last_error = db.Column(db.String(160))
 
+    from ambassadors import install_ambassadors
+    ambassadors = install_ambassadors(app, db, User, ShopOrder, ConfirmedOrderEvent, current_user, require_admin)
+
     def fail(message, status=400):
         db.session.rollback()
         return jsonify(error=message), status
@@ -325,6 +328,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 if user.referred_by_user_id not in (None, referrer.id):
                     return fail("Un parrain est déjà associé à votre compte")
                 user.referred_by_user_id = referrer.id
+            ambassador = ambassadors['prepare'](user, payload.get('ambassador_code', ''))
             prices = {x['product_id']: x['unit_cents'] for x in computed['lines'] if 'product_id' in x}
             for line in inventory_lines(computed["lines"]):
                 conditions = [Product.id == line['product_id'], Product.active == True, Product.stock >= line['quantity']]
@@ -354,6 +358,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             else:
                 db.session.add(ShopProfile(user_id=user.id, contact=contact))
             db.session.flush()
+            ambassadors['attach'](order, ambassador)
             enqueue(order, "created")
             db.session.commit()
             return jsonify(order=serialize(order)), 201
@@ -501,6 +506,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if user.loyalty_points + points > 2147483647:
             raise ValueError("Plafond de points atteint")
         first_paid = ConfirmedOrderEvent.query.filter_by(user_id=user.id).first() is None
+        ambassadors['credit'](order, first_paid)
         db.session.add(ConfirmedOrderEvent(external_order_id=order.reference, user_id=user.id, loyalty_points=points))
         user.loyalty_points += points
         order.points = points
