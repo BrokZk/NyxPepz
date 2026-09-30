@@ -148,7 +148,17 @@
 </section>
 
 <section id="tracking" class="page inner"><p class="eyebrow">PROGRESSION</p><h1>Suivi du poids</h1><button class="shop-secondary" data-go="journal">Voir mes pesées dans le journal</button><div class="form card"><input id="weight" type="number" step=".1" placeholder="Poids en kg"><button id="addWeight">Ajouter</button></div><div class="chart card"><canvas id="weightChart"></canvas></div></section>
-<section id="profile" class="page inner"><p class="eyebrow">COMPTE</p><h1>Mon profil</h1><div class="card pad"><b id="profileName">Nyx</b><p>Code : <b id="profileCode">-----</b></p><p>Points : <b id="profilePoints">0</b></p></div><div class="profile-links"><button class="shop-secondary" data-go="myGifts">Mes cadeaux</button><button class="shop-secondary" data-go="giveaways">Mes jeux concours</button><button class="shop-primary" data-go="nutrition">Mon suivi nutrition</button><button class="shop-secondary" data-go="ambassador">Mon espace ambassadeur</button><button class="shop-secondary" data-go="journal">Mon journal · prises &amp; poids</button><button class="shop-primary" data-go="orders">Mes commandes</button><button class="shop-secondary" data-go="loyalty">Mes récompenses</button><button class="shop-secondary" data-go="parcels">Suivi de mes colis</button><button class="shop-secondary" id="allowNotifications">Recevoir les notifications Telegram</button></div></section>
+<section id="profile" class="page inner">
+ <p class="eyebrow">COMPTE</p><h1>Mon profil</h1>
+ <div class="card pad"><b id="profileName">Nyx</b><p>Code : <b id="profileCode">-----</b></p><p>Points : <b id="profilePoints">0</b></p></div>
+ <div class="profile-links">
+  <button type="button" class="shop-primary" data-go="orders">Mes commandes &amp; colis</button>
+  <button type="button" class="shop-secondary" data-go="loyalty">Mes points &amp; récompenses</button>
+  <button type="button" class="shop-secondary" data-go="myGifts">Mes cadeaux</button>
+  <button type="button" class="shop-secondary" data-go="ambassador">Mon espace ambassadeur</button>
+  <button type="button" class="shop-secondary" id="allowNotifications">Recevoir les notifications Telegram</button>
+ </div>
+</section>
 
 <section id="cart" class="page inner"><p class="eyebrow">VOTRE SÉLECTION</p><h1>Mon panier</h1><button class="gift-shortcut" type="button" data-go="myGifts"><span>🎁 Un lot ou un code cadeau ?</span><b>Recevoir mon cadeau ›</b></button><p id="checkoutNotice" class="shop-notice"></p><div id="cartList"></div>
 <form id="cartGiftForm" class="gift-card gift-space"><label>Code cadeau<input id="cartGiftCode" type="text" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Le code envoyé par NyxPepz" required></label><button id="cartGiftApply" class="gift-secondary" type="submit">Appliquer mon code</button><button id="cartGiftRemove" class="gift-link" type="button" hidden>Retirer le code</button><p id="cartGiftNotice" class="gift-caption" role="status">Ajoutez le produit gagné au panier, puis saisissez votre code personnel. Le lot et sa livraison seront offerts.</p></form>
