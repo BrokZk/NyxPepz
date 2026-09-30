@@ -27,88 +27,151 @@
  const backdrop=document.querySelector('.bg');
  if(backdrop){
   backdrop.setAttribute('aria-hidden','true');
-  backdrop.innerHTML=`<svg class="sapphire-veils" viewBox="0 0 390 844" preserveAspectRatio="xMidYMin slice" focusable="false"><defs>
-   <linearGradient id="veilLight" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#1145d4" stop-opacity="0"/><stop offset=".32" stop-color="#315df3" stop-opacity=".5"/><stop offset=".66" stop-color="#428cff"/><stop offset=".82" stop-color="#99dcff" stop-opacity=".7"/><stop offset="1" stop-color="#3878e9" stop-opacity="0"/></linearGradient>
-   <linearGradient id="veilSilk" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#17349c" stop-opacity="0"/><stop offset=".55" stop-color="#1641df" stop-opacity=".24"/><stop offset=".78" stop-color="#4387ff" stop-opacity=".32"/><stop offset="1" stop-color="#3468ee" stop-opacity="0"/></linearGradient>
-   <filter id="veilBloom" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9"/></filter>
-  </defs><g class="veil-drift">
-   <path d="M-90 370 C20 390 57 180 191 181 S300 146 450 36 L450 115 C324 238 277 154 190 207 S45 408-90 417Z" fill="url(#veilSilk)"/>
-   <path d="M-80 395 C70 401 75 165 217 195 S344 99 455 59" fill="none" stroke="url(#veilLight)" stroke-width="22" filter="url(#veilBloom)" opacity=".5"/>
-   <g fill="none" stroke="url(#veilLight)">
-    <path d="M-80 395 C70 401 75 165 217 195 S344 99 455 59" stroke-width="1.1" opacity=".74"/>
-    <path d="M-83 401 C63 421 81 176 218 200 S355 96 448 49" stroke-width=".5" opacity=".4"/>
-    <path d="M-80 416 C85 418 80 191 230 211 S363 132 462 78" stroke-width=".7" opacity=".23"/>
-    <path d="M-66 196 C72 107 182 358 300 262 S385 177 455 223" stroke-width="1" opacity=".27"/>
-    <path d="M-66 201 C72 125 182 365 300 270 S385 181 455 230" stroke-width=".5" opacity=".22"/>
-   </g>
-  </g><g class="veil-drift veil-drift-low" fill="none" stroke="url(#veilLight)">
-   <path d="M-105 450 C150 580-120 731 160 850 S400 810 460 710" stroke-width="28" filter="url(#veilBloom)" opacity=".12"/>
-   <path d="M-105 450 C150 580-120 731 160 850 S400 810 460 710" stroke-width=".6" opacity=".22"/>
-  </g></svg>`;
-  document.addEventListener('visibilitychange',()=>backdrop.classList.toggle('is-paused',document.hidden));
+  backdrop.innerHTML='<div class="sapphire-veils"><img class="veil-drift veil-image" src="/static/aurora-upper.svg?v=1" alt="" draggable="false"><img class="veil-drift veil-drift-low veil-image" src="/static/aurora-lower.svg?v=1" alt="" draggable="false"></div>';
  }
  const canvas=document.getElementById('dnaCanvas');if(!canvas)return;
  const scene=canvas.closest('.dna-scene');if(backdrop&&scene)backdrop.append(scene);
+ const veils=backdrop&&backdrop.querySelector('.sapphire-veils');
  const ctx=canvas.getContext('2d');if(!ctx)return;
- let width=390,height=844,frame=0,last=0,angle=.65,elapsed=3;
- // Continuous decoration while the application is visible, as requested.
  document.documentElement.dataset.nyxMotion='on';
- const particles=Array.from({length:48},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,r:.65+(i%4)*.3,speed:.06+(i%5)*.014,phase:i*2.1}));
- function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const dpr=Math.min(devicePixelRatio||1,2);width=r.width;height=r.height;canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
- function draw(){
-  ctx.clearRect(0,0,width,height);
-  // A few drifting points, painted behind the helix in the same capped loop.
-  for(const p of particles){const x=(p.x*width+Math.sin(angle*.9+p.phase)*12),y=((p.y-angle*p.speed)%1+1)%1*height,alpha=.3+.4*(.5+.5*Math.sin(angle+p.phase));ctx.fillStyle=`rgba(153,206,255,${alpha})`;ctx.shadowColor='#468fff';ctx.shadowBlur=p.r> .8?7:0;ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fill();}
-  ctx.shadowBlur=0;
-  // The helix extends beyond both viewport edges, with no stop behind the logo.
-  const objects=[],step=12,rows=Math.ceil((height+240)/step)+1,radius=Math.min(32,width*.075),scale=1;
-  // Sparse shooting stars share the same animation loop as the DNA and particles.
-  for(let n=0;n<2;n++){
-   const t=(elapsed+n*2.2)%4.4;if(t>2.8)continue;
-   const progress=t/2.8,cycle=Math.floor((elapsed+n*2.2)/4.4),alpha=Math.sin(progress*Math.PI)*.95;
-   const x=width*(1.06-progress*.95),y=height*(.025+((cycle+n)%3)*.025)+progress*height*.12;
-   const dx=65,dy=-28,g=ctx.createLinearGradient(x+dx,y+dy,x,y);
-   g.addColorStop(0,'rgba(110,177,255,0)');g.addColorStop(1,`rgba(192,226,255,${alpha})`);
-   ctx.beginPath();ctx.moveTo(x+dx,y+dy);ctx.lineTo(x,y);ctx.strokeStyle=g;ctx.lineWidth=1.3;ctx.stroke();
-   ctx.fillStyle=`rgba(232,246,255,${alpha})`;ctx.shadowColor='#87baff';ctx.shadowBlur=8;ctx.beginPath();ctx.arc(x,y,1.3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-  }
-  function point(i,side){const a=i*.23+angle+side*Math.PI,z=Math.sin(a)*radius,x=Math.cos(a)*radius,y=-120+i*step,p=240/(240-z);return {x:width*(.86-.70*y/height)+x*p,y:y+x*.27,z};}
-  const pts=Array.from({length:rows},(_,i)=>[point(i,0),point(i,1)]);
-  pts.forEach((pair,i)=>{
-   objects.push({type:'rung',a:pair[0],b:pair[1],z:(pair[0].z+pair[1].z)/2});
-   pair.forEach((p,s)=>{if(i)objects.push({type:'strand',a:pts[i-1][s],b:p,z:(pts[i-1][s].z+p.z)/2,s});objects.push({type:'atom',p,z:p.z,s});});
-  });
-  objects.sort((a,b)=>a.z-b.z);
-  for(const obj of objects){
-   const depth=(obj.z+radius)/(2*radius);
-   const alpha=.10+.43*depth;
-   if(obj.type==='atom'){
-    const {x,y}=obj.p,r=(1.7+depth*1.05)*scale;
-    const g=ctx.createRadialGradient(x-r*.35,y-r*.4,r*.06,x,y,r);
-    g.addColorStop(0,`rgba(231,250,255,${alpha})`);g.addColorStop(.3,`rgba(${obj.s?'96,196,255':'107,160,255'},${alpha})`);g.addColorStop(1,`rgba(6,40,104,${alpha})`);
-    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
-   }else{
-    const {a,b}=obj;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineCap='round';
-    if(obj.type==='strand'){ctx.strokeStyle=`rgba(${obj.s?'65,169,244':'72,125,240'},${alpha})`;ctx.lineWidth=(1.6+depth)*scale;ctx.stroke();ctx.lineWidth=.55*scale;ctx.strokeStyle=`rgba(201,231,255,${alpha*.7})`;ctx.stroke();}
-    else {const g=ctx.createLinearGradient(a.x,a.y,b.x+.001,b.y);g.addColorStop(0,'rgba(50,112,208,.45)');g.addColorStop(.48,'rgba(149,207,255,.63)');g.addColorStop(.52,'rgba(94,167,244,.63)');g.addColorStop(1,'rgba(26,120,190,.45)');ctx.strokeStyle=g;ctx.lineWidth=1.35*scale;ctx.stroke();}
+
+ // One display-synchronised loop. Only the decorative bitmap is resolution-capped;
+ // text, product photographs and UI retain the screen's full resolution.
+ let width=0,height=0,frame=null,last=null,angle=.65,elapsed=3;
+ let needsResize=true,drawable=false,pageActive=true;
+ let points=[],objects=[];
+ const TAU=Math.PI*2,SPRITE_DPR=2;
+ const particles=Array.from({length:48},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,size:i%4,speed:.06+(i%5)*.014,phase:i*2.1}));
+ function texture(w,h,paint){
+  const image=document.createElement('canvas');image.width=w*SPRITE_DPR;image.height=h*SPRITE_DPR;
+  const brush=image.getContext('2d');brush.scale(SPRITE_DPR,SPRITE_DPR);paint(brush,w,h);return image;
+ }
+ // Tiny textures are painted once. No gradients or shadow blurs are allocated in draw().
+ const sparkles=Array.from({length:4},(_,i)=>texture(32,32,(c)=>{
+  c.fillStyle='#99ceff';c.shadowColor='#468fff';c.shadowBlur=i?14:0;
+  c.beginPath();c.arc(16,16,.65+i*.3,0,TAU);c.fill();
+ }));
+ const atoms=[0,1].map(side=>texture(24,24,c=>{
+  const r=12,g=c.createRadialGradient(r-r*.35,r-r*.4,r*.06,r,r,r);
+  g.addColorStop(0,'#e7faff');g.addColorStop(.3,side?'#60c4ff':'#6ba0ff');g.addColorStop(1,'#062868');
+  c.fillStyle=g;c.beginPath();c.arc(r,r,r,0,TAU);c.fill();
+ }));
+ const rung=texture(64,4,c=>{
+  const g=c.createLinearGradient(0,0,64,0);
+  g.addColorStop(0,'rgba(50,112,208,.45)');g.addColorStop(.48,'rgba(149,207,255,.63)');
+  g.addColorStop(.52,'rgba(94,167,244,.63)');g.addColorStop(1,'rgba(26,120,190,.45)');
+  c.fillStyle=g;c.fillRect(0,0,64,4);
+ });
+ const meteorTail=texture(72,8,c=>{
+  const g=c.createLinearGradient(0,0,72,0);g.addColorStop(0,'#c0e2ff');g.addColorStop(1,'rgba(110,177,255,0)');
+  c.strokeStyle=g;c.lineWidth=1.3;c.lineCap='round';c.beginPath();c.moveTo(0,4);c.lineTo(72,4);c.stroke();
+ });
+ const meteorHead=texture(36,36,c=>{
+  c.fillStyle='#e8f6ff';c.shadowColor='#87baff';c.shadowBlur=16;
+  c.beginPath();c.arc(18,18,1.3,0,TAU);c.fill();
+ });
+ function rebuildGeometry(){
+  points=[];objects=[];
+  // Keep the original helix phase but omit rows entirely outside the viewport.
+  const start=8,end=Math.ceil((height+136)/12);
+  for(let i=start;i<=end;i++){
+   const row=[];
+   for(let side=0;side<2;side++)row.push({x:0,y:0,z:0,baseY:-120+i*12,sin:Math.sin(i*.23),cos:Math.cos(i*.23),side});
+   points.push(row);
+   objects.push({type:0,a:row[0],b:row[1],z:0});
+   for(let side=0;side<2;side++){
+    if(points.length>1)objects.push({type:1,a:points[points.length-2][side],b:row[side],side,z:0});
+    objects.push({type:2,a:row[side],side,z:0});
    }
   }
  }
- function tick(time){
-  frame=0;if(document.hidden)return;
-  if(time-last>=33){
-   const r=canvas.getBoundingClientRect();
-   if(r.width&&r.height&&r.bottom>0&&r.top<innerHeight){const dt=Math.min(time-last,70);angle+=dt*.0008;elapsed+=dt*.001;draw();}
-   last=time;
+ function resize(){
+  needsResize=false;
+  const rect=canvas.getBoundingClientRect();
+  drawable=rect.width>0&&rect.height>0;if(!drawable)return;
+  const nextWidth=rect.width,nextHeight=rect.height;
+  const density=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(900000/(nextWidth*nextHeight)));
+  const pixelsX=Math.max(1,Math.round(nextWidth*density)),pixelsY=Math.max(1,Math.round(nextHeight*density));
+  if(nextWidth===width&&nextHeight===height&&canvas.width===pixelsX&&canvas.height===pixelsY)return;
+  const changed=nextWidth!==width||nextHeight!==height;
+  width=nextWidth;height=nextHeight;
+  if(canvas.width!==pixelsX)canvas.width=pixelsX;
+  if(canvas.height!==pixelsY)canvas.height=pixelsY;
+  ctx.setTransform(pixelsX/width,0,0,pixelsY/height,0,0);
+  ctx.lineCap='round';
+  if(changed){
+   rebuildGeometry();
+   if(veils){
+    const rect=veils.getBoundingClientRect(),padding=60*Math.max(rect.width/390,rect.height/844);
+    veils.style.setProperty('--veil-padding',padding+'px');
+   }
   }
+ }
+ function draw(){
+  ctx.clearRect(0,0,width,height);
+  for(const p of particles){
+   const x=p.x*width+Math.sin(angle*.9+p.phase)*12;
+   const y=(((p.y-angle*p.speed)%1+1)%1)*(height+32)-16;
+   ctx.globalAlpha=.5+.2*Math.sin(angle+p.phase);
+   ctx.drawImage(sparkles[p.size],x-16,y-16,32,32);
+  }
+  for(let n=0;n<2;n++){
+   const t=(elapsed+n*2.2)%4.4;if(t>2.8)continue;
+   const progress=t/2.8,cycle=Math.floor((elapsed+n*2.2)/4.4);
+   const x=width*(1.06-progress*.95),y=height*(.025+((cycle+n)%3)*.025)+progress*height*.12;
+   ctx.globalAlpha=Math.sin(progress*Math.PI)*.95;
+   ctx.save();ctx.translate(x,y);ctx.rotate(-.40677);ctx.drawImage(meteorTail,0,-4,72,8);ctx.restore();
+   ctx.drawImage(meteorHead,x-18,y-18,36,36);
+  }
+  const radius=Math.min(32,width*.075),sin=Math.sin(angle),cos=Math.cos(angle);
+  for(const row of points){
+   const phaseCos=row[0].cos*cos-row[0].sin*sin,phaseSin=row[0].sin*cos+row[0].cos*sin;
+   for(const p of row){
+    const sign=p.side?-1:1,xx=phaseCos*radius*sign;
+    p.z=phaseSin*radius*sign;p.x=width*(.86-.70*p.baseY/height)+xx*240/(240-p.z);p.y=p.baseY+xx*.27;
+   }
+  }
+  for(const obj of objects)obj.z=obj.b?(obj.a.z+obj.b.z)/2:obj.a.z;
+  objects.sort((a,b)=>a.z-b.z);
+  for(const obj of objects){
+   const a=obj.a,b=obj.b;
+   if(b?(Math.max(a.y,b.y)<-4||Math.min(a.y,b.y)>height+4):(a.y<-4||a.y>height+4))continue;
+   const depth=(obj.z+radius)/(2*radius),alpha=.10+.43*depth;
+   if(obj.type===2){
+    const r=1.7+depth*1.05;ctx.globalAlpha=alpha;ctx.drawImage(atoms[obj.side],a.x-r,a.y-r,r*2,r*2);
+   }else if(obj.type===1){
+    ctx.globalAlpha=alpha;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle=obj.side?'#41a9f4':'#487df0';ctx.lineWidth=1.6+depth;ctx.stroke();
+    ctx.globalAlpha=alpha*.7;ctx.lineWidth=.55;ctx.strokeStyle='#c9e7ff';ctx.stroke();
+   }else{
+    const dx=b.x-a.x,dy=b.y-a.y,length=Math.sqrt(dx*dx+dy*dy);if(length<.01)continue;
+    ctx.globalAlpha=1;ctx.save();ctx.translate(a.x,a.y);ctx.rotate(Math.atan2(dy,dx));
+    ctx.drawImage(rung,0,-.675,length,1.35);ctx.restore();
+   }
+  }
+  ctx.globalAlpha=1;
+ }
+ function running(){return pageActive&&!document.hidden;}
+ function tick(time){
+  frame=null;if(!running())return;
+  if(needsResize)resize();
+  // No 33 ms gate: every display frame is used, including 90/120 Hz screens.
+  // Reset after a real pause and cap a long stall so resuming cannot teleport stars.
+  const dt=last===null?0:Math.min(Math.max(time-last,0),50);last=time;
+  if(drawable){angle+=dt*.0008;elapsed+=dt*.001;draw();}
   frame=requestAnimationFrame(tick);
  }
- function resume(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){last=performance.now();frame=requestAnimationFrame(tick);}else draw();}
- // Do not depend on intersection callbacks to restart in an embedded browser.
- if(typeof ResizeObserver==='function')new ResizeObserver(resize).observe(canvas);
- window.addEventListener('resize',resize);
- window.addEventListener('pageshow',()=>{resize();resume();});
- window.addEventListener('focus',resume);
- document.addEventListener('visibilitychange',resume);
- resize();resume();
+ function resume(){
+  const active=running();if(backdrop)backdrop.classList.toggle('is-paused',!active);
+  if(!active){if(frame!==null)cancelAnimationFrame(frame);frame=null;last=null;return;}
+  if(frame===null){last=null;frame=requestAnimationFrame(tick);}
+ }
+ function queueResize(){needsResize=true;resume();}
+ if(typeof ResizeObserver==='function')new ResizeObserver(queueResize).observe(canvas);
+ window.addEventListener('resize',queueResize);
+ window.addEventListener('pageshow',()=>{pageActive=true;queueResize();});
+ window.addEventListener('pagehide',()=>{pageActive=false;resume();});
+ window.addEventListener('focus',queueResize);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)needsResize=true;resume();});
+ resume();
 })();

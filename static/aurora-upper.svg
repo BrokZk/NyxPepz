@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 510 964" preserveAspectRatio="xMidYMin slice"><defs>
+   <linearGradient id="veilLight" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#1145d4" stop-opacity="0" /><stop offset=".32" stop-color="#315df3" stop-opacity=".5" /><stop offset=".66" stop-color="#428cff" /><stop offset=".82" stop-color="#99dcff" stop-opacity=".7" /><stop offset="1" stop-color="#3878e9" stop-opacity="0" /></linearGradient>
+   <linearGradient id="veilSilk" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#17349c" stop-opacity="0" /><stop offset=".55" stop-color="#1641df" stop-opacity=".24" /><stop offset=".78" stop-color="#4387ff" stop-opacity=".32" /><stop offset="1" stop-color="#3468ee" stop-opacity="0" /></linearGradient>
+   <filter id="veilBloom" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9" /></filter>
+  </defs><g>
+   <path d="M-90 370 C20 390 57 180 191 181 S300 146 450 36 L450 115 C324 238 277 154 190 207 S45 408-90 417Z" fill="url(#veilSilk)" />
+   <path d="M-80 395 C70 401 75 165 217 195 S344 99 455 59" fill="none" stroke="url(#veilLight)" stroke-width="22" filter="url(#veilBloom)" opacity=".5" />
+   <g fill="none" stroke="url(#veilLight)">
+    <path d="M-80 395 C70 401 75 165 217 195 S344 99 455 59" stroke-width="1.1" opacity=".74" />
+    <path d="M-83 401 C63 421 81 176 218 200 S355 96 448 49" stroke-width=".5" opacity=".4" />
+    <path d="M-80 416 C85 418 80 191 230 211 S363 132 462 78" stroke-width=".7" opacity=".23" />
+    <path d="M-66 196 C72 107 182 358 300 262 S385 177 455 223" stroke-width="1" opacity=".27" />
+    <path d="M-66 201 C72 125 182 365 300 270 S385 181 455 230" stroke-width=".5" opacity=".22" />
+   </g>
+  </g></svg>
