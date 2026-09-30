@@ -1,0 +1,148 @@
+[
+  {
+    "id": "selank-10mg",
+    "names": [
+      "Selank"
+    ],
+    "format": "10 mg",
+    "title": "Selank 10 mg",
+    "batch": "SELANK10",
+    "report": "223455",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/selank-10mg-223455.png"
+  },
+  {
+    "id": "semax-10mg",
+    "names": [
+      "Semax"
+    ],
+    "format": "10 mg",
+    "title": "Semax 10 mg",
+    "batch": "Semax10",
+    "report": "223474",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/semax-10mg-223474.png"
+  },
+  {
+    "id": "ahk-cu-100mg",
+    "names": [
+      "AHK-Cu"
+    ],
+    "format": "100 mg",
+    "title": "AHK-Cu 100 mg",
+    "batch": "AHKCU100",
+    "report": "223445",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/ahk-cu-100mg-223445.png"
+  },
+  {
+    "id": "mots-c-10mg",
+    "names": [
+      "MOTS-C"
+    ],
+    "format": "10 mg",
+    "title": "MOTS-C 10 mg",
+    "batch": "MOTSC10",
+    "report": "223441",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/mots-c-10mg-223441.png"
+  },
+  {
+    "id": "bpc-157-10mg",
+    "names": [
+      "BPC-157"
+    ],
+    "format": "10 mg",
+    "title": "BPC-157 10 mg",
+    "batch": "BPC157 -10",
+    "report": "223470",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/bpc-157-10mg-223470.png"
+  },
+  {
+    "id": "cagrilintide-10mg",
+    "names": [
+      "Cagrilintide"
+    ],
+    "format": "10 mg",
+    "title": "Cagrilintide 10 mg",
+    "batch": "CAGRI10",
+    "report": "223502",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/cagrilintide-10mg-223502.png"
+  },
+  {
+    "id": "glow-70mg",
+    "names": [
+      "GLOW Stack",
+      "GLOW"
+    ],
+    "format": "70 mg",
+    "title": "GLOW 70 mg",
+    "batch": "GLOW70",
+    "report": "223496",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/glow-70mg-223496.png"
+  },
+  {
+    "id": "klow-80mg",
+    "names": [
+      "KLOW Stack",
+      "KLOW"
+    ],
+    "format": "80 mg",
+    "title": "KLOW 80 mg",
+    "batch": "KLOW80",
+    "report": "223510",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/klow-80mg-223510.png"
+  },
+  {
+    "id": "ghk-cu-50mg",
+    "names": [
+      "GHK-Cu"
+    ],
+    "format": "50 mg",
+    "title": "GHK-Cu 50 mg",
+    "batch": "GHK50",
+    "report": "223489",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/ghk-cu-50mg-223489.png"
+  },
+  {
+    "id": "retatrutide-20mg",
+    "names": [
+      "Retatrutide"
+    ],
+    "format": "20 mg",
+    "title": "Retatrutide 20 mg",
+    "batch": "RETA20",
+    "report": "223434",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/retatrutide-20mg-223434.png"
+  },
+  {
+    "id": "retatrutide-15mg",
+    "names": [
+      "Retatrutide"
+    ],
+    "format": "15 mg",
+    "title": "Retatrutide 15 mg",
+    "batch": "RETA15",
+    "report": "223462",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/retatrutide-15mg-223462.png"
+  },
+  {
+    "id": "retatrutide-10mg",
+    "names": [
+      "Retatrutide"
+    ],
+    "format": "10 mg",
+    "title": "Retatrutide 10 mg",
+    "batch": "RT10 - GREEN TRANSPARENT CAP",
+    "report": "223429",
+    "analysis_date": "25/08/2026",
+    "file": "/static/coa/retatrutide-10mg-223429.png"
+  }
+]

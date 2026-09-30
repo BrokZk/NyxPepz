@@ -1,0 +1,20 @@
+/* COA controls are independent of cart and catalogue styles. */
+.product .coa-button{display:block;width:100%;min-height:44px;padding:10px 6px;margin-top:8px;border:1px solid #6da5db55;border-radius:12px;background:#12243a;color:#bedcff;font:inherit;font-size:12px;line-height:1.4;cursor:pointer}
+.product .coa-button:hover{background:#1a3554;border-color:#80b8ef}
+.coa-button:focus-visible,.coa-viewer button:focus-visible,.coa-viewer a:focus-visible{outline:2px solid #a2d1ff;outline-offset:3px}
+.coa-viewer{box-sizing:border-box;position:fixed;inset:0;margin:0;padding:0;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;border:0;background:#07101c;color:#e4efff;z-index:10000}
+.coa-viewer[open]{display:flex;flex-direction:column}
+.coa-viewer::backdrop{background:#02060eea}
+.coa-viewer[open] [hidden]{display:none!important}
+.coa-heading{display:flex;align-items:center;gap:10px;padding:12px 12px 8px;padding-top:max(12px,env(safe-area-inset-top));flex-shrink:0}
+.coa-heading h2{flex:1;min-width:0;margin:0;color:#e4efff;font-size:17px;line-height:1.35;overflow-wrap:anywhere}
+.coa-viewer button,.coa-download{box-sizing:border-box;border:1px solid #456589;background:#19324e;color:#e4efff;border-radius:9px;min-height:44px;padding:9px 12px;font:inherit;font-size:13px;line-height:1.4;cursor:pointer;text-decoration:none;text-align:center}
+.coa-viewer button:disabled{opacity:.4;cursor:default}
+.coa-meta{margin:0;padding:0 12px 12px;font-size:12px;line-height:1.5;color:#a9bed7;flex-shrink:0;overflow-wrap:anywhere}
+.coa-tools{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:0 12px 12px;border-bottom:1px solid #29415d;flex-shrink:0}
+.coa-download{margin-left:auto;display:inline-flex;align-items:center;background:transparent}
+.coa-status{margin:18px 12px;font-size:14px;line-height:1.5}
+#coaRetry{align-self:flex-start;margin:0 12px 16px}
+.coa-viewport{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom;padding-bottom:env(safe-area-inset-bottom,0px);background:#182230}
+.coa-viewport img{display:block;max-width:none;height:auto;margin:0 auto;background:white}
+@media(min-width:768px){.coa-heading,.coa-meta,.coa-tools{padding-left:24px;padding-right:24px}.coa-heading h2{font-size:20px}.coa-heading{padding-top:16px}.coa-viewport img{max-width:none}}
