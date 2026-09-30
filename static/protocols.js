@@ -14,7 +14,7 @@
  toolbar.children[1].setAttribute('aria-label','Réduire le document');toolbar.children[3].setAttribute('aria-label','Agrandir le document');viewport.append(image);viewer.append(toolbar,viewport);document.body.append(viewer);
  viewer.addEventListener('close',()=>{document.body.style.overflow=previousOverflow;});
  function showSource(source){
-  if(!/^\/static\/protocols\/(?:recapitulatif-[12]|cagrilintide-apercu|cagrilintide-tableau|amino-pack-original)\.png$/.test(source.file))return;
+  if(!/^\/static\/protocols\/(?:recapitulatif-[12]|cagrilintide-apercu|cagrilintide-tableau|amino-pack-original|ahk-cu-100-original)\.png$/.test(source.file))return;
   image.src=documentPath(source.file);image.alt=source.title;previousOverflow=document.body.style.overflow;viewer.showModal();document.body.style.overflow='hidden';setZoom(viewport.clientWidth);viewport.scrollTo(0,0);
  }
  function render(){
@@ -52,7 +52,7 @@
   detail.append(back,el('p','eyebrow protocol-category',cat?.fullLabel||''),title,el('p','protocol-note','Réf. '+entry.reference+' · '+(entry.sourceLabel||sources[0]?.title||'Document NyxPepz')));
   const notice=el('div','protocol-source-note');notice.append(el('b','','Récapitulatif du document fourni'),el('p','',entry.notice||'Transcription du guide NyxPepz, sans validation médicale. Ce résumé ne remplace pas un avis médical personnalisé ni la fiche complète du produit, non fournie ici.'));detail.append(notice);
   const blocks=[['01','Flacon → mélange',entry.mix+(entry.concentration?'\n'+entry.concentration:'')],['02','Dose de départ',entry.start],['03','Ensuite',entry.then],['04','Rythme & moment',entry.rhythm]];
-  blocks.forEach(([number,label,text])=>{const card=el('article','card protocol-block');const heading=el('h3');heading.append(el('span','protocol-step',number),document.createTextNode(label));card.append(heading,el('p','',text));detail.append(card);});
+  blocks.forEach(([number,label,text],index)=>{const card=el('article','card protocol-block');const heading=el('h3');heading.append(el('span','protocol-step',number),document.createTextNode(entry.blockLabels?.[index]||label));card.append(heading,el('p','',text));detail.append(card);});
   detail.append(el('p','protocol-note','Notation du document : U = unités sur une seringue U-100 (100 U = 1 mL).'));
   const footnote=el('details','protocol-footnote');footnote.append(el('summary','','Notes du document fourni'));
   (entry.notes||['Les « max » de ce tableau sont des limites, pas des objectifs. La plupart des gens trouvent leur équilibre à la dose cible, et n’ont aucun intérêt à viser le maximum.']).forEach(note=>{const paragraph=el('p','',note);paragraph.style.whiteSpace='pre-line';footnote.append(paragraph);});detail.append(footnote);
@@ -62,7 +62,7 @@
  search.addEventListener('input',render);
  function load(){
   list.textContent='Chargement des fiches…';
-  fetch('/static/protocols.json?v=11.9').then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
+  fetch('/static/protocols.json?v=11.11').then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
    if(!Array.isArray(result.categories)||!Array.isArray(result.entries)||!Array.isArray(result.sources))throw Error('format');
    data=result;render();
   }).catch(()=>{list.replaceChildren(el('p','protocol-note','Les fiches n’ont pas pu être chargées.'),button('Réessayer','shop-secondary',load));});

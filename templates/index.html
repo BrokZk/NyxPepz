@@ -2,7 +2,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#02050b"><title>NyxPepz</title>
 <link rel="stylesheet" href="/static/style.css?v=8.1">
-<link rel="stylesheet" href="/static/mobile.css?v=11.9">
+<link rel="stylesheet" href="/static/mobile.css?v=12.0">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script></head><body>
 <div class="bg"></div>
@@ -21,6 +21,7 @@
   <button data-go="referral"><i data-icon="users" aria-hidden="true"></i><b>Parrainage</b><span>1 filleul acheteur<br>= 1 point parrainage</span><em>›</em></button>
   <button data-go="calculator"><i data-icon="calculator" aria-hidden="true"></i><b>Calculateur</b><span>mg, mcg et mL</span><em>›</em></button>
   <button data-go="tracking"><i data-icon="trend" aria-hidden="true"></i><b>Suivi du poids</b><span>Suivez vos progrès</span><em>›</em></button>
+  <button data-go="journal"><i data-icon="calendar" aria-hidden="true"></i><b>Mon journal</b><span>Prises &amp; poids</span><em>›</em></button>
   <button data-go="protocols"><i data-icon="protocol" aria-hidden="true"></i><b>Protocoles</b><span>Consulter les documents</span><em>›</em></button>
  </div>
  <article class="rank card"><header><b><i data-icon="trophy" aria-hidden="true"></i> Top 3 du classement</b><button data-go="leaderboard" aria-label="Voir le classement">›</button></header><div id="homeLeaders" class="podium"></div></article>
@@ -47,8 +48,39 @@
 <section id="encyclopedia" class="page inner"><p class="eyebrow">BIBLIOTHÈQUE</p><h1>Encyclopédie peptides</h1><p class="calculator-intro">Retrouvez les documents et fiches de référence.</p><label class="encyclopedia-search">Rechercher une fiche<input id="encyclopediaSearch" type="search" placeholder="Nom du peptide, mot-clé…"></label><div id="encyclopediaFilters" class="order-filters" role="group" aria-label="Catégories de fiches"></div><div id="encyclopediaList"><p>Chargement des fiches…</p></div><div id="encyclopediaDetail" hidden></div></section>
 <section id="referral" class="page inner"><p class="eyebrow">PARRAINAGE</p><h1>Parrainage</h1><div class="codebox">TON CODE<strong id="refcode">-----</strong><button id="copyCode">Copier</button></div><div class="card pad">Filleuls : <b id="filleuls">0</b>　 Points : <b id="refpoints2">0</b></div><div class="form card"><input id="applyCode" placeholder="Code de mon parrain"><button id="applyReferral">Valider</button></div></section>
 <section id="protocols" class="page inner"><p class="eyebrow">BIBLIOTHÈQUE NYXPEPZ</p><h1>Protocoles</h1><div id="protocolBrowse"><p class="calculator-intro">Choisissez une catégorie, puis votre produit et son format.</p><label class="encyclopedia-search">Rechercher un produit<input id="protocolSearch" type="search" placeholder="Ex. Reta 10 mg, GHK-Cu…"></label><div id="protocolCategories" class="filters category-menu" role="group" aria-label="Catégories de protocoles"></div><div id="protocolList"><p role="status">Chargement des fiches…</p></div></div><div id="protocolDetail" hidden></div></section>
-<section id="tracking" class="page inner"><p class="eyebrow">PROGRESSION</p><h1>Suivi</h1><div class="form card"><input id="weight" type="number" step=".1" placeholder="Poids en kg"><button id="addWeight">Ajouter</button></div><div class="chart card"><canvas id="weightChart"></canvas></div></section>
-<section id="profile" class="page inner"><p class="eyebrow">COMPTE</p><h1>Mon profil</h1><div class="card pad"><b id="profileName">Nyx</b><p>Code : <b id="profileCode">-----</b></p><p>Points : <b id="profilePoints">0</b></p></div><div class="profile-links"><button class="shop-primary" data-go="orders">Mes commandes</button><button class="shop-secondary" data-go="loyalty">Mes récompenses</button><button class="shop-secondary" data-go="parcels">Suivi de mes colis</button><button class="shop-secondary" id="allowNotifications">Recevoir les notifications Telegram</button></div></section>
+<section id="journal" class="page inner">
+ <p class="eyebrow">MON ESPACE PERSONNEL</p><h1>Mon journal</h1>
+ <p class="journal-intro">Vos prises et votre poids, au même endroit. Visible uniquement depuis votre compte dans l’application.</p>
+ <div class="journal-actions"><button id="journalAdd" class="shop-primary" type="button">＋ Ajouter une prise</button><button id="journalAddWeight" class="shop-secondary" type="button">Noter mon poids</button></div>
+ <p class="journal-caption">Un journal de vos saisies, sans conseil de dosage ni rappel automatique.</p>
+ <div id="journalNotice" role="status" aria-live="polite"></div>
+ <button id="journalRefresh" class="journal-refresh" type="button">Actualiser le journal</button>
+ <form id="journalForm" class="card journal-form" hidden>
+  <h2 id="journalFormTitle">Ajouter une prise</h2><fieldset>
+  <label>Produit<select id="journalProduct" required></select></label>
+  <div class="journal-fields"><label>Date<input id="journalDate" type="date" min="1900-01-01" max="2100-12-31" required></label><label>Heure<input id="journalTime" type="time" required></label></div>
+  <div class="journal-fields"><label>Quantité notée<input id="journalAmount" type="text" inputmode="decimal" maxlength="15" placeholder="Ex. 1" required></label><label>Unité<select id="journalUnit"><option value="mg">mg</option><option value="mcg">mcg</option><option value="mL">mL</option><option value="U-100">Unités U-100</option></select></label></div>
+  <label>Statut<select id="journalStatus" required><option value="">Choisir un statut</option><option value="done">Effectué</option><option value="planned">Prévu</option></select></label>
+  <label>Note ou ressenti (facultatif)<textarea id="journalNote" rows="3" maxlength="1000" placeholder="Votre note personnelle…"></textarea></label>
+  <p class="journal-caption">Heure locale telle que vous la saisissez. Une prise prévue reste « prévue » tant que vous ne la marquez pas comme effectuée.</p>
+  <p id="journalFormError" role="alert"></p><div class="journal-actions"><button type="submit" class="shop-primary">Enregistrer</button><button type="button" id="journalCancel" class="shop-secondary">Annuler</button></div>
+ </fieldset></form>
+ <form id="journalWeightForm" class="card journal-form" hidden><h2>Noter mon poids</h2><fieldset>
+  <div class="journal-fields"><label>Date<input id="journalWeightDate" type="date" min="1900-01-01" required></label><label>Heure locale<input id="journalWeightTime" type="time" required></label></div>
+  <label>Poids (kg)<input id="journalWeight" type="text" inputmode="decimal" placeholder="Ex. 80,5" required></label>
+  <p class="journal-caption">Cette pesée apparaîtra aussi dans votre graphique « Suivi du poids ».</p>
+  <p id="journalWeightError" role="alert"></p><div class="journal-actions"><button type="submit" class="shop-primary">Enregistrer la pesée</button><button id="journalWeightCancel" type="button" class="shop-secondary">Annuler</button></div>
+ </fieldset></form>
+ <div class="card journal-calendar"><div class="journal-month"><button id="journalPrev" type="button" aria-label="Mois précédent">‹</button><h2 id="journalMonth"></h2><button id="journalNext" type="button" aria-label="Mois suivant">›</button></div>
+ <div class="journal-week" aria-hidden="true"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div><div id="journalDays" class="journal-days" role="group" aria-label="Choisir un jour"></div>
+ <div class="journal-legend"><span><i class="done"></i>Effectué</span><span><i class="planned"></i>Prévu</span><span><i class="weight"></i>Poids</span></div>
+ <div class="journal-actions"><button id="journalToday" class="shop-secondary" type="button">Aujourd’hui</button><button id="journalWholeMonth" class="shop-secondary" type="button">Tout le mois</button></div></div>
+ <div class="card journal-summary"><p id="journalSummary"></p><button class="journal-refresh" type="button" data-go="tracking">Voir ma courbe de poids ›</button></div>
+ <div class="journal-list-head"><h2 id="journalDayTitle"></h2><label>Afficher<select id="journalFilter"><option value="all">Tout</option><option value="done">Effectué</option><option value="planned">Prévu</option><option value="weight">Pesées</option></select></label></div>
+ <div id="journalEntries"></div>
+</section>
+<section id="tracking" class="page inner"><p class="eyebrow">PROGRESSION</p><h1>Suivi du poids</h1><button class="shop-secondary" data-go="journal">Voir mes pesées dans le journal</button><div class="form card"><input id="weight" type="number" step=".1" placeholder="Poids en kg"><button id="addWeight">Ajouter</button></div><div class="chart card"><canvas id="weightChart"></canvas></div></section>
+<section id="profile" class="page inner"><p class="eyebrow">COMPTE</p><h1>Mon profil</h1><div class="card pad"><b id="profileName">Nyx</b><p>Code : <b id="profileCode">-----</b></p><p>Points : <b id="profilePoints">0</b></p></div><div class="profile-links"><button class="shop-secondary" data-go="journal">Mon journal · prises &amp; poids</button><button class="shop-primary" data-go="orders">Mes commandes</button><button class="shop-secondary" data-go="loyalty">Mes récompenses</button><button class="shop-secondary" data-go="parcels">Suivi de mes colis</button><button class="shop-secondary" id="allowNotifications">Recevoir les notifications Telegram</button></div></section>
 
 <section id="cart" class="page inner"><p class="eyebrow">VOTRE SÉLECTION</p><h1>Mon panier</h1><p id="checkoutNotice" class="shop-notice"></p><div id="cartList"></div>
 <form id="checkoutForm" class="checkout-form card" hidden><h2>Vos coordonnées</h2><p>Vos informations servent à préparer et livrer votre commande.</p><div class="checkout-fields">
@@ -79,4 +111,5 @@
 <div id="adminPacks"></div>
 <div class="admin-panel card"><h2>Ajouter une nouveauté</h2><div class="admin-form"><input id="nTitle" placeholder="Titre"><input id="nSubtitle" placeholder="Sous-titre"><input id="nImage" placeholder="URL image"><label class="upload-btn">📷 Photo<input id="nFile" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="nAdd">+ Publier</button></div></div><div id="adminNews"></div></section></main>
 <nav aria-label="Navigation principale"><button data-go="home"><i data-icon="home" aria-hidden="true"></i><span>Accueil</span></button><button data-go="catalog" data-nav-primary="true"><i data-icon="bag" aria-hidden="true"></i><span>Boutique</span></button><button data-go="cart"><i data-icon="cart" aria-hidden="true"></i><span>Panier <b id="cartCount" hidden></b></span></button><button data-go="referral"><i data-icon="users" aria-hidden="true"></i><span>Parrainage</span></button><button data-go="profile"><i data-icon="user" aria-hidden="true"></i><span>Profil</span></button></nav>
-<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=11.4"></script><script src="/static/app.js?v=11.9"></script><script src="/static/shop.js?v=11.0"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.9"></script></body></html>
+<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=12.0"></script><script src="/static/app.js?v=11.9"></script><script src="/static/shop.js?v=11.0"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.11"></script><script src="/static/journal.js?v=12.0"></script></body></html>
+

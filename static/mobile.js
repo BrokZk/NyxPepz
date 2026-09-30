@@ -1,6 +1,7 @@
 /* Small local SVG icons and a projected, depth-sorted DNA illustration. */
 (()=>{
  const icons={
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 2v6M17 2v6M3 11h18M7 15h2M13 15h2M7 18h2"/>',
  cart:'<path d="M2 3h3l3 12h11l3-9H6M9 19h.01M18 19h.01"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
  parcel:'<path d="m3 7 9-5 9 5v11l-9 5-9-5V7Zm0 0 9 5 9-5M12 12v11M7 5l10 5"/>',
  bag:'<path d="M5 7h14l1 14H4L5 7Z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/>',
@@ -18,7 +19,7 @@
  gift:'<path d="M3 11h18V7H3v4ZM5 11v10h14V11M12 7v14"/><path d="M12 7C4 8 4 1 8 2c2 0 4 5 4 5ZM12 7c8 1 8-6 4-5-2 0-4 5-4 5Z"/>'
  };
  document.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[el.dataset.icon]||icons.star}</svg>`});
- document.querySelectorAll('input:not([type=file])').forEach(el=>{if(!el.hasAttribute('aria-label'))el.setAttribute('aria-label',el.placeholder||el.id)});
+ document.querySelectorAll('input:not([type=file])').forEach(el=>{if(!el.hasAttribute('aria-label')&&!el.closest('label'))el.setAttribute('aria-label',el.placeholder||el.id)});
  const moon=document.querySelector('.brand-moon');
  if(moon)moon.innerHTML='<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="moonLight" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e1f9ff"/><stop offset=".35" stop-color="#7abaff"/><stop offset=".7" stop-color="#347aff"/><stop offset="1" stop-color="#1339be"/></linearGradient><mask id="moonCut"><circle cx="24" cy="24" r="20" fill="white"/><circle cx="15" cy="19" r="19.5" fill="black"/></mask></defs><circle cx="24" cy="24" r="20" fill="url(#moonLight)" mask="url(#moonCut)"/></svg>';
 

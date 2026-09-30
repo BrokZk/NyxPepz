@@ -383,6 +383,34 @@
         "Le document mentionne des effets potentiels étudiés sur le métabolisme énergétique, le tissu adipeux et la sensibilité à l’insuline. Il précise que les données disponibles proviennent principalement d’études précliniques.",
         "Les indications de préparation et de conservation figurent dans le document original ci-dessous. Leur reproduction ne constitue pas une validation médicale."
       ]
+    },
+    {
+      "id": "ahk-cu-100",
+      "category": "skin",
+      "title": "AHK-Cu 100 mg",
+      "reference": "AHKCU-100",
+      "aliases": "ahk cu ahkcu cuivre",
+      "sourceIds": [
+        "ahk-original"
+      ],
+      "sourceLabel": "Fiche 100 mg fournie · données de dose non disponibles",
+      "notice": "Document fourni à des fins de recherche et d’éducation, sans validation médicale. Son tableau de doses est vide et indique que les données sont « en cours de compilation ». Cette fiche ne fournit donc pas de protocole d’injection validé.",
+      "mix": "Flacon : 100 mg\nVolume retenu : 3 mL (eau BAC mentionnée dans le document)",
+      "concentration": "33,33 mg/mL pour un volume final de 3 mL",
+      "blockLabels": [
+        "Flacon → mélange",
+        "Conversion mathématique",
+        "Calendrier",
+        "Rythme & moment"
+      ],
+      "start": "Pour 100 mg dans un volume final de 3 mL :\n\n1 mg = 0,03 mL = 3 unités U-100\n\nÉquivalence mathématique uniquement, pas une recommandation de dose.",
+      "then": "Aucun palier ni calendrier de progression renseigné. Le tableau de doses est annoncé « en cours de compilation ».",
+      "rhythm": "Fréquence, durée et moment : non renseignés.\nLa source affiche « subcutaneous » (sous-cutanée), sans fournir de données de dose ni de preuve clinique dans cette capture. Cette mention ne valide pas la voie d’administration.",
+      "notes": [
+        "Concentrations présentées dans le document pour 100 mg : 1 mL → 100 mg/mL ; 2 mL → 50 mg/mL ; 3 mL → 33,33 mg/mL. Ces équivalences supposent que le volume indiqué est le volume final de la solution.",
+        "Les colonnes « Volume / dose » et « Unités (U-100) » sont marquées « n/a » dans la source. Aucun schéma du précédent document de 10 mg n’est transféré à cette fiche de 100 mg.",
+        "Aucune condition de conservation n’est fournie dans cette capture. Faire vérifier la préparation et la voie d’administration par un médecin ou un pharmacien."
+      ]
     }
   ],
   "sources": [
@@ -410,6 +438,11 @@
       "id": "amino-original",
       "file": "/static/protocols/amino-pack-original.png",
       "title": "5-Amino-1MQ · fiche fournie"
+    },
+    {
+      "id": "ahk-original",
+      "file": "/static/protocols/ahk-cu-100-original.png",
+      "title": "AHK-Cu 100 mg · fiche fournie"
     }
   ]
 }

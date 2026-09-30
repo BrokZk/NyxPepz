@@ -86,6 +86,9 @@ def require_admin():
  u=current_user()
  return u if is_admin(u) else None
 
+from journal import install_journal
+JournalEntry=install_journal(app,db,Product,current_user)
+
 @app.get("/")
 def index():return render_template("index.html")
 @app.get("/health")
@@ -198,6 +201,7 @@ def admin_delete_user(uid):
             return jsonify(error="Suppression impossible : compte lié à un parrainage ou à des commandes"), 409
         shop["Profile"].query.filter_by(user_id=uid).delete()
         shop["Loyalty"].query.filter_by(user_id=uid).delete()
+        JournalEntry.query.filter_by(user_id=uid).delete()
         db.session.delete(u)
         db.session.commit()
     except SQLAlchemyError:
@@ -209,12 +213,23 @@ def weights():
  u=current_user()
  if not u:return jsonify(error="Non authentifié"),401
  if request.method=="POST":
-  try:w=float((request.json or {}).get("weight"))
+  data=request.get_json(silent=True)
+  if not isinstance(data,dict):return jsonify(error="Poids invalide"),400
+  try:w=float(str(data.get("weight")).replace(',','.'))
   except Exception:return jsonify(error="Poids invalide"),400
   if not 25<=w<=350:return jsonify(error="Poids hors plage"),400
-  db.session.add(WeightEntry(user_id=u.id,weight_kg=w));db.session.commit()
+  measured_at=datetime.now(timezone.utc)
+  if 'date' in data:
+   try:
+    measured_at=datetime.fromisoformat(data['date'].replace('Z','+00:00'))
+    if measured_at.tzinfo is None or measured_at.year<1900 or measured_at>datetime.now(timezone.utc):raise ValueError()
+    measured_at=measured_at.astimezone(timezone.utc)
+   except (ValueError,TypeError,AttributeError):return jsonify(error="Date de pesée invalide ou future"),400
+  # A retry of a dated measurement should not create a duplicate point.
+  if not ('date' in data and WeightEntry.query.filter_by(user_id=u.id,created_at=measured_at,weight_kg=w).first()):
+   db.session.add(WeightEntry(user_id=u.id,weight_kg=w,created_at=measured_at));db.session.commit()
  rows=WeightEntry.query.filter_by(user_id=u.id).order_by(WeightEntry.created_at.asc()).all()
- return jsonify([{"id":x.id,"weight":x.weight_kg,"date":x.created_at.isoformat()} for x in rows])
+ return jsonify([{"id":x.id,"weight":x.weight_kg,"date":(x.created_at if x.created_at.tzinfo else x.created_at.replace(tzinfo=timezone.utc)).isoformat()} for x in rows])
 @app.post("/api/referral/apply")
 def referral_apply():
  try:
