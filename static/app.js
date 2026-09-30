@@ -42,6 +42,16 @@ function vial(p){
  const name=String(p.name||"NyxPepz").toUpperCase(),dose=String(p.format||"").trim();
  return `<div class="product-photo branded-photo"><div class="branded-vial" role="img" aria-label="Visuel ${escapeHTML(p.name)} ${escapeHTML(dose)}"><img loading="lazy" src="/static/nyx-vial.png" alt="" width="1024" height="1536"><div class="vial-print" aria-hidden="true"><span class="vial-brand"><b>Nyx</b>Pepz</span><span class="vial-rule"></span><span class="vial-name ${name.length>11?'long-name':''}">${escapeHTML(name)}</span>${dose?`<span class="vial-dose ${dose.length>10?'long-dose':''}">${escapeHTML(dose)}</span>`:''}<span class="vial-bottom-rule"></span></div></div></div>`
 }
+function includedSupplies(p){
+ // Explicit catalogue matches keep accessories, water sold separately and
+ // unknown products from inheriting a promise about their contents.
+ if(p.kind!=='product'||p.cat==='Accessoires')return '';
+ const normalize=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+ const name=normalize(p.name),dose=String(p.format||'').trim().match(/^(\d+(?:[.,]\d+)?)\s*mg$/i);
+ if(name==='retatrutide'||name==='reta')return dose&&[10,15,20,30].includes(Number(dose[1].replace(',','.')))?'Eau + 5 seringues + 5 tampons alcool inclus':'';
+ const withWater=['tesamorelin','cagrilintide','bpc157','wolverinestack','semax','selank','dsip','motsc','klow','klowstack','ghkcu','ahkcu','glow','glowstack','melanotan1','melanotan2','pt141'];
+ return withWater.includes(name)?'Eau incluse':'';
+}
 async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
 try{products=await api("/api/catalog");await loadPacks();renderCatalog();loadHomeLeaders();loadNews()}catch(e){toast(e.message)}}
 const categoryLabels={"Perte de graisse":"Perte de poids","Beauté · peau":"Beauté / Peau","Régénération":"Régénération / Réparation","Nootropiques":"Nootropiques","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};
@@ -73,7 +83,7 @@ function renderCatalog(cat=activeCategory){
  filters.querySelector('button').onclick=()=>{$('#search').value='';renderCatalog('Tous');scrollTo(0,0);};
  $('#catalog .catalog-head h1').textContent=cat==='Tous'?'Recherche':categoryLabels[cat]||cat;
  $('#catalog .catalog-head p').textContent=`${shown.length} produit${shown.length===1?'':'s'}${q?' trouvé'+(shown.length===1?'':'s'):''}`;
- target.innerHTML=shown.length?`<div class="product-grid">${shown.map(p=>`<article class="product" ${p.kind==='pack'?`data-pack-id="${p.id}"`:`data-product-id="${p.id}"`}>${p.kind==='pack'?`<div class="pack-card-visual">${packVisual(p)}</div>`:vial(p)}<h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.format||"NyxPepz")}</p><strong>${escapeHTML(p.price)} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?escapeHTML(p.stock)+" en stock":"Rupture"}</small><div class="catalog-only">${escapeHTML(categoryLabels[p.cat]||p.cat)}</div></article>`).join('')}</div>`:'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>';
+ target.innerHTML=shown.length?`<div class="product-grid">${shown.map(p=>`<article class="product" ${p.kind==='pack'?`data-pack-id="${p.id}"`:`data-product-id="${p.id}"`}>${p.kind==='pack'?`<div class="pack-card-visual">${packVisual(p)}</div>`:vial(p)}<h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.format||"NyxPepz")}</p><strong>${escapeHTML(p.price)} €</strong><small class="stock ${p.stock>0?"ok":"out"}">${p.stock>0?escapeHTML(p.stock)+" en stock":"Rupture"}</small>${includedSupplies(p)?`<small class="product-included">${includedSupplies(p)}</small>`:''}<div class="catalog-only">${escapeHTML(categoryLabels[p.cat]||p.cat)}</div></article>`).join('')}</div>`:'<p class="empty-state">Aucun produit ne correspond à votre recherche.</p>';
 }
 $("#search").oninput=()=>renderCatalog();
 

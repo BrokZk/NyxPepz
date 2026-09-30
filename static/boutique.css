@@ -1,0 +1,12 @@
+/* Included supplies only; product artwork uses the original realistic vials. */
+#products .product-included {
+  display: block;
+  color: #91c6ff;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 500;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #88baf326;
+  overflow-wrap: anywhere;
+}
