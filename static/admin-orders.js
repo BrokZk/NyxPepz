@@ -7,7 +7,11 @@
  const money=c=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format((c||0)/100);
  const date=t=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(t*1000));
  const countries={FR:'France',BE:'Belgique',ES:'Espagne'};
- const groups={preparing:['Bordereaux à faire','Commandes payées ou offertes : préparez les étiquettes Mondial Relay avec les coordonnées de chaque commande.','Aucun bordereau à faire.'],payments:['Paiements','Les paiements en attente ou à vérifier sont regroupés ici.','Aucun paiement en attente ou à vérifier.'],ready:['Prêts à envoyer','Les bordereaux sont faits. Marquez les colis expédiés après leur dépôt.','Aucun colis prêt à envoyer.'],shipping:['En livraison','Colis expédiés ou disponibles au point de retrait.','Aucun colis en livraison.'],history:['Historique','Toutes les commandes payées ou offertes, avec leur état actuel.','Aucune commande payée ou offerte dans l’historique.']};
+ const groups={preparing:['Bordereaux à faire','Commandes payées ou offertes : préparez les étiquettes Mondial Relay avec les coordonnées de chaque commande.','Aucun bordereau à faire.'],payments:['Paiements','Vérifiez un paiement reçu et validez-le ici, y compris par un autre moyen que PayGate.','Aucun paiement en attente ou à vérifier.'],ready:['Prêts à envoyer','Les bordereaux sont faits. Marquez les colis expédiés après leur dépôt.','Aucun colis prêt à envoyer.'],shipping:['En livraison','Colis expédiés ou disponibles au point de retrait.','Aucun colis en livraison.'],history:['Historique','Toutes les commandes payées ou offertes, avec leur état actuel.','Aucune commande payée ou offerte dans l’historique.'],expired:['Expirées','Si vous avez reçu un paiement après expiration, ouvrez la commande pour le valider. Le stock sera vérifié à nouveau.','Aucune réservation expirée.']};
+ const paymentMethods={crypto:'Cryptomonnaie',bank_transfer:'Virement bancaire',paypal:'PayPal',cash:'Espèces',other:'Autre'};
+ const paid=o=>!o.is_gift&&['paid','shipped','available','delivered'].includes(o.status);
+ const helpPending=o=>!o.is_gift&&['awaiting_payment','payment_review'].includes(o.status)&&(o.payment_help_pending??o.payment_help_requested);
+ const paymentRecord=o=>o.payment_record||{method:o.payments?.length?'crypto':'unknown',label:o.payments?.length?'Cryptomonnaie':'Moyen non renseigné',note:o.payment_note||'',revision:0};
  let group='preparing',cursors=[null],page=0,next=null,selected=null,selectedRef=null;
  let listSeq=0,detailSeq=0,listController,detailController,loading=false,busy=false,verified=false,dirty=true,loaded=false,scroll=0,returnRef=null;
  const active=()=>root.classList.contains('active');
@@ -36,7 +40,8 @@
   middle.append(el('span','ao-badge ao-status-'+o.status,status(o)),el('span','ao-row-arrow','›'));
   const bottom=el('small','ao-row-meta',date(o.created_at)+' · '+o.reference);
   b.setAttribute('aria-label','Ouvrir la commande de '+person(o)+', '+status(o)+', '+money(o.total_cents)+', '+o.reference);
-  b.append(top,middle,bottom);if(o.payment_help_requested)b.append(el('small','ao-help-request','Autre paiement demandé'));
+  b.append(top,middle,bottom);if(helpPending(o))b.append(el('small','ao-help-request','Autre paiement demandé'));
+  if(paid(o)&&paymentRecord(o).method!=='unknown')b.append(el('small','ao-payment-method-label','Paiement : '+paymentRecord(o).label));
   li.append(b);return li;
  }
  function restoreList(){scrollTo({top:scroll,behavior:'instant'});if(returnRef){[...get('aoList').querySelectorAll('[data-reference]')].find(b=>b.dataset.reference===returnRef)?.focus({preventScroll:true});}}
@@ -111,6 +116,37 @@
  }
  function action(label,fn,primary=false){const b=button(label,fn,primary?'ao-primary':'ao-secondary');b.dataset.aoMutate='';return b;}
  function formButton(label){const b=el('button','ao-primary',label);b.type='submit';return b;}
+ function methodField(id,value){
+  const wrapper=el('label','','Moyen de paiement'),input=el('select');input.id=id;input.required=true;
+  const empty=el('option','','Choisir le moyen utilisé');empty.value='';input.append(empty);
+  for(const [code,label] of Object.entries(paymentMethods)){const option=el('option','',label);option.value=code;input.append(option);}
+  input.value=Object.prototype.hasOwnProperty.call(paymentMethods,value)?value:'';wrapper.append(input);return {wrapper,input};
+ }
+ function paymentEditor(o){
+  const record=paymentRecord(o),card=el('section','ao-card ao-payment-record');
+  card.append(el('h2','','Paiement validé'),el('p','ao-method-value',record.label||'Moyen non renseigné'));
+  if(record.note)card.append(el('p','ao-record-note',record.note));
+  if(record.recorded_at)card.append(el('p','ao-muted','Moyen enregistré le '+date(record.recorded_at)));
+  const editor=el('details','ao-payment-editor');editor.id='aoEditPayment';editor.append(el('summary','','Modifier le moyen de paiement'),el('p','ao-muted','Précisez comment cette commande a été payée. Le montant, les points et le chiffre d’affaires restent inchangés.'));
+  const form=el('form'),fieldset=el('fieldset');fieldset.dataset.aoMutate='';
+  const method=methodField('aoEditMethod',record.method),reference=field('Note / référence','aoEditNote','text',record.note||'');
+  reference.input.required=true;reference.input.minLength=3;reference.input.maxLength=300;reference.input.placeholder='Ex. Reçu en crypto via PayGate';
+  fieldset.append(method.wrapper,reference.wrapper,formButton('Enregistrer le moyen de paiement'));form.append(fieldset);editor.append(form);card.append(editor);
+  form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;mutate('payment-method',{payment_method:method.input.value,note:reference.input.value.trim(),expected_revision:record.revision},'Moyen de paiement mis à jour.',stage(o));};
+  return card;
+ }
+ function confirmationForm(o,host){
+  host.append(el('h2','',o.status==='expired'?'Paiement reçu après expiration':'Valider un paiement reçu'),el('p','ao-muted','Indiquez le moyen utilisé et le montant que vous avez réellement reçu. Vous pouvez valider vous-même, sans attendre de confirmation de PayGate.'));
+  if(o.status==='expired')host.append(el('p','ao-late-payment','La réservation a expiré. Le paiement ne pourra être validé que si les produits et les points utilisés sont encore disponibles.'));
+  const form=el('form'),fieldset=el('fieldset');fieldset.dataset.aoMutate='';
+  const method=methodField('aoPaymentMethod',o.payments?.length?'crypto':''),amount=field('Montant total reçu (€)','aoReceived'),reference=field('Note / référence','aoPaymentNote');
+  amount.input.inputMode='decimal';amount.input.required=true;amount.input.placeholder='Montant vérifié en euros';reference.input.required=true;reference.input.minLength=3;reference.input.maxLength=300;reference.input.placeholder='Ex. Virement reçu sur Revolut';
+  fieldset.append(method.wrapper,amount.wrapper,reference.wrapper,formButton('Valider le paiement'));form.append(fieldset);
+  form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const value=amount.input.value.trim().replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(value)){note('aoDetailError','Indiquez un montant en euros avec au maximum deux décimales.');get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});return;}
+   const [euros,cents='']=value.split('.'),total=Number(euros)*100+Number(cents.padEnd(2,'0'));
+   if(!Number.isSafeInteger(total)||total!==o.total_cents){note('aoDetailError','Le montant reçu doit correspondre au total de la commande : '+money(o.total_cents)+'.');get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});return;}
+   mutate('confirm-payment',{confirmed_total_cents:total,payment_method:method.input.value,note:reference.input.value.trim()},'Paiement validé. Le bordereau est à faire.','preparing');};host.append(form);
+ }
  function renderDetail(){
   const o=selected,host=get('aoDetailBody');host.replaceChildren();
   const header=el('div','ao-detail-heading');header.append(el('span','ao-badge ao-status-'+o.status,status(o)));
@@ -124,22 +160,19 @@
   const contents=el('section','ao-card');contents.append(el('h2','','Contenu de la commande'));
   for(const line of o.lines){const item=el('div','ao-product-line'),label=el('div');label.append(el('b','',line.name),el('small','',(line.format?line.format+' · ':'')+'Quantité '+line.quantity));item.append(label,el('strong','',money(line.line_cents)));contents.append(item);}
   for(const [label,amount] of [['Produits',o.subtotal_cents],...(o.discount_cents?[['Réduction',-o.discount_cents]]:[]),['Livraison',o.shipping_cents],['Total de la commande',o.total_cents]]){const line=el('div','ao-total');line.append(el('span','',label),el('strong','',money(amount)));contents.append(line);}host.append(contents);
-  if(o.payment_help_requested){const help=el('section','ao-card ao-callout');help.append(el('h2','','Autre paiement demandé'),el('p','',o.status==='awaiting_payment'?'Client à recontacter. Son paiement reste en attente.':'Une demande de contact a été enregistrée.'));
+  if(helpPending(o)){const help=el('section','ao-card ao-callout');help.append(el('h2','','Autre paiement demandé'),el('p','',o.status==='awaiting_payment'?'Client à recontacter. S’il a déjà payé, validez son paiement ci-dessous.':'Vérifiez le moyen finalement utilisé, puis validez le paiement ci-dessous.'));
    const username=typeof o.username==='string'&&/^[A-Za-z0-9_]{5,32}$/.test(o.username)?o.username:null,id=String(o.telegram_id||'');
    if(username||/^[0-9]+$/.test(id)){const a=el('a','ao-secondary','Contacter sur Telegram ↗');a.href=username?'https://t.me/'+username:'tg://user?id='+id;a.target='_blank';a.rel='noopener noreferrer';help.append(a);}host.append(help);
   }
+  if(paid(o))host.append(paymentEditor(o));
   const payment=el('details','ao-card ao-payment-proof');payment.append(el('summary','',o.is_gift?'Commande offerte':'Détails du paiement'));
   for(const p of o.payments||[])payment.append(el('p','ao-evidence','Reçu : '+p.amount+' '+p.coin+'\nVersé : '+p.forwarded_amount+'\nTransaction : '+p.transaction_id));
-  if(o.payment_note)payment.append(el('p','',o.payment_note));if(!o.payment_note&&!o.payments?.length)payment.append(el('p','ao-muted',o.is_gift?'Produit et livraison offerts. Aucun paiement à encaisser.':'Aucun paiement reçu à vérifier pour le moment.'));host.append(payment);
+  if(o.payment_note&&!paid(o))payment.append(el('p','',o.payment_note));if(!o.payment_note&&!o.payments?.length)payment.append(el('p','ao-muted',o.is_gift?'Produit et livraison offerts. Aucun paiement à encaisser.':paid(o)?'Aucune transaction automatique enregistrée.':'Aucune transaction automatique enregistrée. Vous pouvez valider un paiement reçu avec le formulaire ci-dessous.'));
+  if(o.payment_help_requested&&!helpPending(o))payment.append(el('p','ao-muted','Historique : une demande d’autre moyen de paiement avait été enregistrée.'));
+  host.append(payment);
   const actions=el('section','ao-card ao-workflow');host.append(actions);
-  if(o.status==='awaiting_payment'){
-   actions.append(el('h2','','En attente de paiement'),el('p','ao-muted','Le bordereau sera à préparer après réception et validation du paiement.'));
-  }else if(o.status==='payment_review'){
-   actions.append(el('h2','','Vérifier le paiement'),el('p','ao-muted','Vérifiez le paiement reçu, puis confirmez son montant total en euros.'));
-   const form=el('form'),fieldset=el('fieldset');fieldset.dataset.aoMutate='';const amount=field('Montant total reçu (€)','aoReceived'),reference=field('Note de vérification','aoPaymentNote');
-   amount.input.inputMode='decimal';amount.input.required=true;amount.input.placeholder='Montant vérifié en euros';reference.input.required=true;reference.input.minLength=3;reference.input.maxLength=300;reference.input.placeholder='Ex. Reçu — référence de transaction';
-   fieldset.append(amount.wrapper,reference.wrapper,formButton('Valider le paiement'));form.append(fieldset);
-   form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const value=amount.input.value.trim().replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(value)){note('aoDetailError','Indiquez un montant en euros avec au maximum deux décimales.');get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});return;}mutate('confirm-payment',{confirmed_total_cents:Math.round(Number(value)*100),note:reference.input.value.trim()},'Paiement validé. Le bordereau est à faire.','preparing');};actions.append(form);
+  if(!o.is_gift&&['awaiting_payment','payment_review','expired'].includes(o.status)){
+   confirmationForm(o,actions);
   }else if(['paid','gifted'].includes(o.status)&&!o.preparation?.prepared){
    actions.append(el('h2','','Bordereau à faire'),el('p','ao-muted','Créez votre étiquette dans Mondial Relay avec les coordonnées ci-dessus. Une fois l’étiquette prête, marquez cette étape comme terminée.'),action('Bordereau fait',()=>mutate('preparation',{prepared:true},'Bordereau enregistré comme fait. Le colis est prêt à envoyer.','ready'),true));
   }else if(['paid','gifted'].includes(o.status)||['shipped','available'].includes(o.status)){

@@ -25,6 +25,9 @@ REWARDS = {150: 1000, 300: 2500, 500: 5000, 750: 8000}
 STATUSES = {"awaiting_payment": "En attente de paiement", "payment_review": "Paiement reçu — vérification",
             "paid": "Payée", "gifted": "Cadeau offert — à préparer", "shipped": "Expédiée", "available": "Disponible au point de retrait",
             "delivered": "Livrée", "cancelled": "Annulée", "expired": "Réservation expirée"}
+PAYMENT_METHODS = {"crypto": "Crypto", "bank_transfer": "Virement bancaire", "paypal": "PayPal",
+                   "cash": "Espèces", "other": "Autre"}
+PAID_STATUSES = ("paid", "shipped", "available", "delivered")
 
 
 def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent,
@@ -76,6 +79,17 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
         prepared_at = db.Column(db.BigInteger, nullable=False)
         prepared_by_telegram_id = db.Column(db.BigInteger, nullable=False)
+
+    class ShopPaymentRecord(db.Model):
+        # Append-only audit entries keep administrator corrections separate from
+        # payment proofs and accounting events. No existing order needs migration.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        revision = db.Column(db.Integer, primary_key=True)
+        method = db.Column(db.String(24), nullable=False)
+        note = db.Column(db.String(300), nullable=False)
+        source = db.Column(db.String(32), nullable=False)
+        recorded_at = db.Column(db.BigInteger)
+        recorded_by_telegram_id = db.Column(db.BigInteger)
 
     class ShopProfile(db.Model):
         user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
@@ -137,6 +151,42 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         gifts = app.extensions.get('nyx_gifts')
         return bool(gifts and gifts['is_gift_order'](order))
 
+    def serialize_payment_record(record):
+        return {"method": record.method, "label": PAYMENT_METHODS.get(record.method, "Non renseigné"),
+                "note": record.note, "revision": record.revision, "source": record.source,
+                "recorded_at": record.recorded_at,
+                "recorded_by_telegram_id": record.recorded_by_telegram_id}
+
+    def payment_record(order):
+        latest = ShopPaymentRecord.query.filter_by(order_id=order.id).order_by(
+            ShopPaymentRecord.revision.desc()).first()
+        if latest:
+            return serialize_payment_record(latest)
+        proof = ShopPayment.query.filter_by(order_id=order.id).first()
+        method = "crypto" if proof else "unknown"
+        return {"method": method, "label": PAYMENT_METHODS.get(method, "Non renseigné"),
+                "note": order.payment_note or "", "revision": 0,
+                "source": "legacy_paygate" if proof else "unrecorded", "recorded_at": None,
+                "recorded_by_telegram_id": None}
+
+    def add_payment_record(order, method, note, admin, source, previous):
+        # Preserve the previous inferred information when correcting an old order.
+        if source == "admin_correction" and previous["revision"] == 0:
+            db.session.add(ShopPaymentRecord(order_id=order.id, revision=0,
+                method=previous["method"], note=previous["note"], source=previous["source"],
+                recorded_at=previous["recorded_at"],
+                recorded_by_telegram_id=previous["recorded_by_telegram_id"]))
+        db.session.add(ShopPaymentRecord(order_id=order.id, revision=previous["revision"] + 1,
+            method=method, note=note, source=source, recorded_at=int(time.time()),
+            recorded_by_telegram_id=admin.telegram_id))
+
+    def payment_note(payload):
+        note = payload.get("note", "")
+        if (not isinstance(note, str) or not 3 <= len(note.strip()) <= 300
+                or any(ord(c) < 32 or ord(c) == 127 for c in note)):
+            raise ValueError("Indiquez comment le paiement a été reçu (3 à 300 caractères)")
+        return note.strip()
+
     @app.after_request
     def private_shop_response(response):
         if request.path.startswith('/api/shop/') and request.path not in ('/api/shop/config', '/api/shop/paygate/callback'):
@@ -176,12 +226,17 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "country": order.contact["country"], "tracking_number": order.tracking_number,
                 "can_pay": awaiting_payment and bool(paygate_ready()),
                 "payment_help_requested": requested_help,
+                "payment_help_pending": requested_help and order.status in ("awaiting_payment", "payment_review"),
                 "can_request_payment_help": awaiting_payment and payment_help_available() and not requested_help}
         if admin:
             owner = db.session.get(User, order.user_id)
             preparation = db.session.get(ShopPreparation, order.id)
             data.update(contact=order.contact, telegram_id=owner.telegram_id if owner else None,
                         username=owner.username if owner else None, payment_note=order.payment_note,
+                        payment_record=payment_record(order),
+                        payment_history=[serialize_payment_record(record) for record in
+                            ShopPaymentRecord.query.filter_by(order_id=order.id).order_by(
+                                ShopPaymentRecord.revision.desc()).limit(10)],
                         preparation={"prepared": preparation is not None,
                                      "prepared_at": preparation.prepared_at if preparation else None},
                         payments=[{"coin": p.coin, "amount": p.amount, "forwarded_amount": p.forwarded_amount,
@@ -618,6 +673,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         groups = {'action': ('awaiting_payment', 'payment_review', 'paid', 'gifted'),
                   'preparing': ('paid', 'gifted'), 'ready': ('paid', 'gifted'),
                   'payments': ('awaiting_payment', 'payment_review'),
+                  'expired': ('expired',),
                   'shipping': ('shipped', 'available'), 'history': ('paid', 'gifted', 'shipped', 'available', 'delivered')}
         group = request.args.get('group')
         try:
@@ -656,27 +712,56 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     @app.post("/api/shop/admin/orders/<reference>/confirm-payment")
     def confirm_payment(reference):
-        if not require_admin():
+        admin = require_admin()
+        if not admin:
             return fail("Interdit", 403)
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return fail('Données invalides')
-        order = ShopOrder.query.filter_by(reference=reference).first()
-        if not order:
-            return fail("Commande introuvable", 404)
         try:
+            # Serialize with expiry, callbacks and other administrators before
+            # rereading reservation flags. A lost response can then be retried.
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
             if is_gift_order(order):
                 return fail("Cette commande cadeau ne nécessite aucune validation de paiement", 409)
-            if order.status in ("paid", "shipped", "available", "delivered"):
-                return jsonify(order=serialize(order, True), duplicate=True)
             if type(payload.get("confirmed_total_cents")) is not int or payload["confirmed_total_cents"] != order.total_cents:
                 return fail("Vérifiez le montant total payé en euros avant validation")
-            note = payload.get("note", "")
-            if not isinstance(note, str) or not 3 <= len(note.strip()) <= 300:
-                return fail("Indiquez la référence de votre vérification du paiement")
-            changed = db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id, ShopOrder.status == "payment_review").values(status="paid"), execution_options={"synchronize_session": False}).rowcount
+            try:
+                note = payment_note(payload)
+            except ValueError as exc:
+                return fail(str(exc))
+            previous = payment_record(order)
+            method = payload.get("payment_method")
+            if "payment_method" in payload and (not isinstance(method, str) or method not in PAYMENT_METHODS):
+                return fail("Choisissez le moyen de paiement réellement utilisé")
+            if order.status in PAID_STATUSES:
+                # Confirmation never doubles as an edit of an already paid order.
+                # Retrying the original confirmation after an administrative edit
+                # still returns its current state, without overwriting that edit.
+                confirmed = ShopPaymentRecord.query.filter_by(order_id=order.id, source="admin_confirmation").first()
+                same = (confirmed.note == note and (method is None or confirmed.method == method)) if confirmed else (
+                    order.payment_note == note and (method is None or previous["method"] == method))
+                if not same:
+                    return fail("Cette commande est déjà payée. Utilisez « Modifier le moyen de paiement ».", 409)
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            if order.status not in ("awaiting_payment", "payment_review", "expired"):
+                return fail("Cette commande ne peut pas être validée comme payée", 409)
+            if method is None:
+                if order.status != "payment_review":
+                    return fail("Choisissez le moyen de paiement réellement utilisé", 409)
+                # Preserve compatibility with the existing review form. An absent
+                # proof is never presented as a verified crypto transaction.
+                method = previous["method"]
+            changed = db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id,
+                ShopOrder.status.in_(("awaiting_payment", "payment_review", "expired"))).values(
+                    status="paid"), execution_options={"synchronize_session": False}).rowcount
             if not changed:
-                return fail("Aucun paiement à vérifier pour cette commande", 409)
+                return fail("La commande a changé. Actualisez avant de valider le paiement.", 409)
             db.session.refresh(order)
             if not order.stock_reserved:
                 for line in inventory_lines(order.lines):
@@ -689,7 +774,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 if changed != 1:
                     return fail("Paiement tardif : les points de la récompense ne sont plus disponibles", 409)
                 order.reward_reserved = True
-            order.payment_note = note.strip()
+            order.payment_note = note
+            add_payment_record(order, method, note, admin, "admin_confirmation", previous)
             credit_order(order)
             enqueue(order, "paid")
             db.session.commit()
@@ -698,6 +784,50 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return fail(str(exc), 409)
         except SQLAlchemyError:
             return fail("Validation indisponible ; aucun point crédité partiellement", 503)
+
+    @app.post("/api/shop/admin/orders/<reference>/payment-method")
+    def correct_payment_method(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail("Données invalides")
+        method, revision = payload.get("payment_method"), payload.get("expected_revision")
+        if not isinstance(method, str) or method not in PAYMENT_METHODS:
+            return fail("Choisissez le moyen de paiement réellement utilisé")
+        if type(revision) is not int or revision < 0:
+            return fail("Version du paiement invalide. Actualisez la commande.")
+        try:
+            note = payment_note(payload)
+        except ValueError as exc:
+            return fail(str(exc))
+        try:
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            if is_gift_order(order) or order.status not in PAID_STATUSES:
+                return fail("Seul le moyen de paiement d’une commande payée peut être corrigé", 409)
+            previous = payment_record(order)
+            if previous["revision"] != revision:
+                if (previous["revision"] == revision + 1 and previous["source"] == "admin_correction"
+                        and previous["method"] == method and previous["note"] == note
+                        and previous["recorded_by_telegram_id"] == admin.telegram_id):
+                    db.session.commit()
+                    return jsonify(order=serialize(order, True), duplicate=True)
+                return fail("Le paiement a été modifié entre-temps. Actualisez la commande avant de réessayer.", 409)
+            if previous["method"] == method and previous["note"] == note:
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            add_payment_record(order, method, note, admin, "admin_correction", previous)
+            # Keep the original confirmation note/proofs, accounting date, stock,
+            # rewards and notification outbox unchanged by this metadata correction.
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Modification du moyen de paiement indisponible ; réessayez", 503)
 
     @app.post("/api/shop/admin/orders/<reference>/preparation")
     def update_preparation(reference):
@@ -761,7 +891,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         click.echo(f"{expire_orders()} réservations expirées")
 
     app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
-        "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation,
+        "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation, "PaymentRecord": ShopPaymentRecord,
         "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
     return app.extensions["nyx_shop"]

@@ -49,11 +49,11 @@
   $id('otherPaymentNotice').textContent=settings?.payment_help_available?'Enregistrez votre commande et demandez à être recontacté sur Telegram ou avec vos coordonnées. Aucun paiement n’est effectué par ce bouton.':'La demande de contact est momentanément indisponible.';
  }
  function paymentHelpHTML(order){
-  if(!order.payment_help_requested)return '';
+  if(!order.payment_help_requested||!['awaiting_payment','payment_review'].includes(order.status))return '';
   return `<div class="payment-help-status" role="status"><b>Autre moyen de paiement demandé</b><span>${order.status==='awaiting_payment'?'Votre demande est enregistrée. NyxPepz vous recontactera sur Telegram ou avec les coordonnées de votre commande. Le paiement reste à effectuer.':'Une demande de contact a été enregistrée pour cette commande.'}</span></div>`;
  }
  function adminPaymentHelpHTML(order){
-  if(!order.payment_help_requested)return '';
+  if(!order.payment_help_requested||!['awaiting_payment','payment_review'].includes(order.status))return '';
   const username=typeof order.username==='string'&&/^[A-Za-z0-9_]{5,32}$/.test(order.username)?order.username:null;
   const id=String(order.telegram_id||'');
   const contactURL=username?'https://t.me/'+username:/^[0-9]+$/.test(id)?'tg://user?id='+id:null;
