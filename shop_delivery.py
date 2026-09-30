@@ -133,6 +133,13 @@ def install_delivery(app, db, User, shop):
             if order.status in ("paid", "shipped", "available", "delivered"):
                 help_status = "Demande antérieure — paiement validé depuis"
             heading += "\n" + help_status
+        if customer and event == 'shipped':
+            thanks = ('Merci pour votre confiance en NyxPepz !' if gift
+                      else 'Merci d’avoir commandé chez NyxPepz !')
+            heading += ('\n\n' + thanks
+                        + '\nVotre colis est en route vers votre point relais ou votre locker.'
+                        + '\nSurveillez vos e-mails : Mondial Relay vous enverra une notification '
+                          'dès qu’il sera disponible au retrait.\n')
         text = f"{heading}\n{order.reference}\nTotal : {order.total_cents / 100:.2f} €"
         if gift:
             text += '\nProduits et livraison offerts.'

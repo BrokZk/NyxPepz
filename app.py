@@ -557,6 +557,8 @@ from shop import install_shop
 shop = install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent, current_user, require_admin, pack_shop)
 from gifts import install_gifts
 gifts = install_gifts(app, db, User, Product, shop, current_user, require_admin)
+from sales import install_sales
+install_sales(app, db, shop, ConfirmedOrderEvent, gifts, require_admin)
 from giveaways import install_giveaways
 def giveaway_customer_eligible(uid):
  return bool(ConfirmedOrderEvent.query.filter_by(user_id=uid).first() or shop['Order'].query.filter(shop['Order'].user_id==uid,shop['Order'].status.in_(['paid','shipped','available','delivered']),~gifts['order_clause'](shop['Order'].id)).first())
