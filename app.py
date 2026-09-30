@@ -88,6 +88,8 @@ def require_admin():
 
 from journal import install_journal
 JournalEntry=install_journal(app,db,Product,current_user)
+from nutrition import install_nutrition
+nutrition=install_nutrition(app,db,current_user,WeightEntry)
 
 @app.get("/")
 def index():return render_template("index.html")
@@ -203,6 +205,7 @@ def admin_delete_user(uid):
         shop["Profile"].query.filter_by(user_id=uid).delete()
         shop["Loyalty"].query.filter_by(user_id=uid).delete()
         JournalEntry.query.filter_by(user_id=uid).delete()
+        nutrition['purge_user'](uid)
         db.session.delete(u)
         db.session.commit()
     except SQLAlchemyError:
