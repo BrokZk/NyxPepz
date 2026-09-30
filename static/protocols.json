@@ -360,6 +360,29 @@
       "rhythm": "30 min avant chaque exposition au soleil\n(protocole identique au MT-2)",
       "aliases": "melanotan",
       "sourcePage": 8
+    },
+    {
+      "id": "5-amino-1mq-50",
+      "category": "weight",
+      "title": "5-Amino-1MQ 50 mg",
+      "reference": "5AMINO-50",
+      "aliases": "5 amino 1mq 5-amino1q amino1q",
+      "sourceIds": [
+        "amino-original"
+      ],
+      "sourceLabel": "Fiche Nyx · information de recherche",
+      "notice": "Transcription du document fourni, sans validation médicale. Celui-ci indique un usage de recherche uniquement, non destiné à la consommation humaine, et des données provenant principalement d’études précliniques. Les quantités ci-dessous sont celles du document, pas une recommandation de traitement.",
+      "mix": "Flacon : 50 mg\nVolume final après reconstitution : 4 mL",
+      "concentration": "12,5 mg/mL",
+      "start": "Jours 1–2 (« Tolérance » dans le document)\n2,5 mg = 20 unités U-100 = 0,20 mL",
+      "then": "Jours 3+ (« Standard » dans le document)\n5 mg = 40 unités U-100 = 0,40 mL\n\nAlternative BID indiquée :\n2,5 mg × 2 = 20 unités × 2 = 0,20 mL × 2",
+      "rhythm": "Fréquence indiquée dans le document : une ou deux injections par jour, par voie sous-cutanée.",
+      "notes": [
+        "Conversion indiquée : 1 unité U-100 = 0,125 mg (125 mcg).",
+        "BID désigne deux fois par jour. Le document présente ce schéma comme une alternative, pas comme un ajout au schéma quotidien.",
+        "Le document mentionne des effets potentiels étudiés sur le métabolisme énergétique, le tissu adipeux et la sensibilité à l’insuline. Il précise que les données disponibles proviennent principalement d’études précliniques.",
+        "Les indications de préparation et de conservation figurent dans le document original ci-dessous. Leur reproduction ne constitue pas une validation médicale."
+      ]
     }
   ],
   "sources": [
@@ -382,6 +405,11 @@
       "id": "cagri-table",
       "file": "/static/protocols/cagrilintide-tableau.png",
       "title": "Cagrilintide · tableau de recherche fourni"
+    },
+    {
+      "id": "amino-original",
+      "file": "/static/protocols/amino-pack-original.png",
+      "title": "5-Amino-1MQ · fiche fournie"
     }
   ]
 }

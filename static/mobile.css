@@ -264,3 +264,5 @@ h1,h2,h3,.welcome h1,.promo-copy h2{font-weight:750;letter-spacing:-.35px}
 #adminProducts .admin-stock-status:empty{display:none}
 #adminProducts .admin-stock-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
 #adminProducts button:disabled{opacity:.6;cursor:wait}
+
+.product .accessory-photo{height:218px;display:flex;align-items:center;overflow:hidden;border-radius:10px;background:#030c16}.accessory-photo svg{display:block;width:100%;height:auto;max-height:100%}

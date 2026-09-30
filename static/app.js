@@ -35,6 +35,7 @@ document.body.classList.add('has-page-back');
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 const meta={"Perte de graisse":["◯","Un corps plus sain, une meilleure sensibilité"],"Régénération":["♧","Des tissus plus forts, une récupération accélérée"],"Beauté · peau":["♙","Un éclat naturel, une régénération visible"],"Nootropiques":["◇","Clarté, concentration et équilibre"],"Performance":["ϟ","Performance et vitalité"],"Longévité":["∞","Longévité / Anti-âge"],"Libido":["♡","Bien-être et vitalité"]};
 function vial(p){
+ if(p.image_url==='/static/protocols/amino-pack-original.png')return `<div class="product-photo accessory-photo"><svg viewBox="665 255 647 415" role="img" aria-label="10 seringues et 10 tampons alcool"><image href="/static/protocols/amino-pack-original.png" width="1312" height="1199"/></svg></div>`;
  // Custom photos uploaded in Admin remain available. Replace the original
  // bundled catalogue artwork and missing photos with the new label template.
  if(p.image_url&&!p.image_url.startsWith("/static/"))return `<div class="product-photo"><img loading="lazy" src="${escapeHTML(p.image_url)}" alt="${escapeHTML(p.name)}"></div>`;
@@ -44,7 +45,7 @@ function vial(p){
 async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
 try{products=await api("/api/catalog");await loadPacks();renderCatalog();loadHomeLeaders();loadNews()}catch(e){toast(e.message)}}
 const categoryLabels={"Perte de graisse":"Perte de poids","Beauté · peau":"Beauté / Peau","Régénération":"Régénération / Réparation","Nootropiques":"Nootropiques","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};
-const categoryIcons={"Perte de graisse":"⚖️","Beauté · peau":"✨","Régénération":"💪","Nootropiques":"🧠","Performance":"⚡","Longévité":"🧬","Libido":"♡"};
+const categoryIcons={"Perte de graisse":"⚖️","Beauté · peau":"✨","Régénération":"💪","Nootropiques":"🧠","Performance":"⚡","Longévité":"🧬","Libido":"♡","Accessoires":"✚"};
 function catalogItems(){
  return [...packs.filter(p=>p.price>0).map(p=>({...p,kind:'pack',name:p.title,format:packDescription(p),cat:'Packs & promos'})),...products.map(p=>({...p,kind:'product'}))];
 }

@@ -14,7 +14,7 @@
  toolbar.children[1].setAttribute('aria-label','Réduire le document');toolbar.children[3].setAttribute('aria-label','Agrandir le document');viewport.append(image);viewer.append(toolbar,viewport);document.body.append(viewer);
  viewer.addEventListener('close',()=>{document.body.style.overflow=previousOverflow;});
  function showSource(source){
-  if(!/^\/static\/protocols\/(?:recapitulatif-[12]|cagrilintide-apercu|cagrilintide-tableau)\.png$/.test(source.file))return;
+  if(!/^\/static\/protocols\/(?:recapitulatif-[12]|cagrilintide-apercu|cagrilintide-tableau|amino-pack-original)\.png$/.test(source.file))return;
   image.src=documentPath(source.file);image.alt=source.title;previousOverflow=document.body.style.overflow;viewer.showModal();document.body.style.overflow='hidden';setZoom(viewport.clientWidth);viewport.scrollTo(0,0);
  }
  function render(){
@@ -62,7 +62,7 @@
  search.addEventListener('input',render);
  function load(){
   list.textContent='Chargement des fiches…';
-  fetch('/static/protocols.json?v=11.8').then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
+  fetch('/static/protocols.json?v=11.9').then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
    if(!Array.isArray(result.categories)||!Array.isArray(result.entries)||!Array.isArray(result.sources))throw Error('format');
    data=result;render();
   }).catch(()=>{list.replaceChildren(el('p','protocol-note','Les fiches n’ont pas pu être chargées.'),button('Réessayer','shop-secondary',load));});

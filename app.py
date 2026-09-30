@@ -536,4 +536,27 @@ with app.app_context():
  apply_shop_catalog_update()
  pack_shop["seed"]()
 
+def apply_accessory_catalog_update():
+ # One-time initial inventory: later deploys must preserve sales and admin edits.
+ key="2026-09-30-syringes-swabs-100-packs-v1"
+ if db.session.get(CatalogUpdate,key):return False
+ try:
+  db.session.add(CatalogUpdate(key=key));db.session.flush()
+  name="Pack 10 seringues + 10 tampons alcool"
+  if not Product.query.filter_by(name=name).first():
+   db.session.add(Product(name=name,format="U-100 · 1 mL · 10 + 10 pièces",
+    price=10,category="Accessoires",stock=100,active=True,sort_order=200,
+    image_url="/static/protocols/amino-pack-original.png"))
+  db.session.commit()
+  return True
+ except IntegrityError:
+  db.session.rollback()
+  if db.session.get(CatalogUpdate,key):return False
+  raise
+ except SQLAlchemyError:
+  db.session.rollback();raise
+
+with app.app_context():
+ apply_accessory_catalog_update()
+
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
