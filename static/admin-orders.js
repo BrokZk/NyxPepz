@@ -81,6 +81,31 @@
   if(!value)return;const item=el('div','ao-contact-field'),text=el('div');text.append(el('span','',label),el('p','',value));
   const b=button('Copier',()=>copy(value),'ao-copy');b.setAttribute('aria-label','Copier : '+label);item.append(text,b);host.append(item);
  }
+ function phoneParts(value,country){
+  // Formatting for a separate calling-code field, not phone-number validation.
+  // An explicit international prefix always takes priority over the address.
+  const compact=String(value||'').trim().replace(/[\s.()\-]/g,'');
+  if(!/^(?:\+|00)?\d+$/.test(compact))return null;
+  const rules={FR:{code:'33',national:/^[1-9]\d{8}$/,trunk:true},BE:{code:'32',national:/^[1-9]\d{7,8}$/,trunk:true},ES:{code:'34',national:/^[6-9]\d{8}$/,trunk:false}};
+  let rule,number=compact;
+  if(compact.startsWith('+')||compact.startsWith('00')){
+   const international=compact.replace(/^(?:\+|00)/,'');
+   rule=Object.values(rules).find(r=>international.startsWith(r.code));
+   if(!rule)return null;number=international.slice(rule.code.length);
+  }else rule=rules[country];
+  if(!rule)return null;
+  if(rule.trunk&&number.startsWith('0'))number=number.slice(1);
+  return rule.national.test(number)?{prefix:'+'+rule.code,number}:null;
+ }
+ function phoneField(host,contact){
+  const parts=phoneParts(contact.phone,contact.country);
+  if(!parts){contactField(host,'Téléphone',contact.phone);return;}
+  const item=el('div','ao-contact-field ao-phone-field'),text=el('div');text.append(el('span','','Téléphone'));
+  const number=el('div','ao-phone-number'),prefix=el('span','ao-phone-prefix',parts.prefix);
+  prefix.setAttribute('aria-label','Indicatif '+parts.prefix);number.append(prefix,el('strong','',parts.number));
+  text.append(number,el('small','ao-phone-hint','Sélectionnez '+parts.prefix+' dans Mondial Relay. Copie du numéro seul.'),el('small','ao-phone-original','Saisi : '+contact.phone));
+  const b=button('Copier',()=>copy(parts.number),'ao-copy');b.setAttribute('aria-label','Copier le téléphone sans indicatif');item.append(text,b);host.append(item);
+ }
  function field(label,id,type='text',value=''){
   const wrapper=el('label','',label),input=el('input');input.id=id;input.type=type;input.value=value;wrapper.append(input);return {wrapper,input};
  }
@@ -94,7 +119,7 @@
   const contact=el('section','ao-card');contact.append(el('h2','','Coordonnées de livraison'));
   const c=o.contact,address=[c.address,c.address_extra,[c.postal_code,c.city].filter(Boolean).join(' '),countries[c.country]||c.country].filter(Boolean).join('\n');
   contact.append(button('Copier toutes les coordonnées',()=>copy(person(o)+'\n'+address+'\n'+c.email+'\n'+c.phone),'ao-secondary ao-copy-all'));
-  contactField(contact,'Nom et prénom',person(o));contactField(contact,'Adresse',address);contactField(contact,'Email',c.email);contactField(contact,'Téléphone',c.phone);
+  contactField(contact,'Prénom',c.first_name);contactField(contact,'Nom',c.last_name);contactField(contact,'Adresse',address);contactField(contact,'Email',c.email);phoneField(contact,c);
   if(o.username)contactField(contact,'Pseudo Telegram','@'+o.username);host.append(contact);
   const contents=el('section','ao-card');contents.append(el('h2','','Contenu de la commande'));
   for(const line of o.lines){const item=el('div','ao-product-line'),label=el('div');label.append(el('b','',line.name),el('small','',(line.format?line.format+' · ':'')+'Quantité '+line.quantity));item.append(label,el('strong','',money(line.line_cents)));contents.append(item);}
