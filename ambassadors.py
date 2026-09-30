@@ -168,12 +168,17 @@ def install_ambassadors(app,db,User,Order,Confirmed,current_user,require_admin):
   return jsonify(ok=True)
 
  def dashboard(amb,admin=False):
-  # No names, addresses, customer IDs, health/journal data or order contents.
+  # Only attributed orders: Telegram first name and purchased item snapshots.
+  # Never return contact details, Telegram IDs, payment or journal data.
   rows=AmbassadorCommission.query.filter_by(ambassador_id=amb.id).order_by(AmbassadorCommission.created_at.desc(),AmbassadorCommission.id.desc()).limit(500).all()
   payouts=AmbassadorPayout.query.filter_by(ambassador_id=amb.id).order_by(AmbassadorPayout.id.desc()).limit(500).all()
-  refs=dict(db.session.query(Order.id,Order.reference).filter(Order.id.in_([c.order_id for c in rows])).all()) if admin else {}
+  orders={o.id:o for o in db.session.query(Order.id,Order.reference,Order.lines,User.first_name).outerjoin(User,User.id==Order.user_id).filter(Order.id.in_([c.order_id for c in rows])).all()}
+  def sale_details(c):
+   order=orders.get(c.order_id)
+   items=[dict(name=line.get('name') or 'Produit',format=line.get('format') or '',quantity=line.get('quantity',1),line_cents=line.get('line_cents',0)) for line in (order.lines or [])] if order else []
+   return dict(customer_first_name=(order.first_name or '').strip() or 'Client Telegram',items=items,**({'order_reference':order.reference} if admin else {})) if order else dict(customer_first_name='Client Telegram',items=[])
   return dict(ambassador=config(amb),totals=totals(amb),
-   commissions=[dict(id=c.id,sale='Vente '+str(c.id),basis_cents=c.basis_cents,amount_cents=c.amount_cents,first_order=c.first_order,status=c.status,date=c.created_at,reason=c.reason,**({'order_reference':refs.get(c.order_id)} if admin else {})) for c in rows],
+   commissions=[dict(id=c.id,sale='Vente '+str(c.id),basis_cents=c.basis_cents,amount_cents=c.amount_cents,first_order=c.first_order,status=c.status,date=c.created_at,reason=c.reason,**sale_details(c)) for c in rows],
    payouts=[dict(id=p.id,amount_cents=p.amount_cents,period=p.period,date=p.paid_date,reference=p.reference) for p in payouts],history_limit=500)
 
  @app.get('/api/ambassador/dashboard')

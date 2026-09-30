@@ -17,7 +17,11 @@
   const wrap=el('div','amb-history');wrap.append(el('h2','','Ventes et commissions'));
   wrap.append(el('p','journal-caption','Les 500 écritures les plus récentes sont affichées. Les soldes incluent tout l’historique.'));
   if(!data.commissions.length)wrap.append(el('p','card journal-empty','Aucune commission pour le moment.'));
-  for(const c of data.commissions){const row=el('article','card amb-row');row.append(el('span','journal-badge '+(c.status==='approved'?'done':'planned'),states[c.status]),el('h3','',c.sale+' · '+new Date(c.date*1000).toLocaleDateString('fr-FR')),el('p','','Produits payés : '+money(c.basis_cents)),el('strong','','Commission à 10 % : '+money(c.amount_cents)),el('p','journal-caption',c.first_order?'Premier achat du client':'Commande suivante'));if(c.reason)row.append(el('p','journal-caption',c.reason));
+  for(const c of data.commissions){const row=el('article','card amb-row');row.append(el('span','journal-badge '+(c.status==='approved'?'done':'planned'),states[c.status]),el('h3','',(c.customer_first_name||'Client Telegram')+' · '+new Date(c.date*1000).toLocaleDateString('fr-FR')),el('p','journal-caption',c.sale));
+   const items=Array.isArray(c.items)?c.items:[];
+   for(const item of items)row.append(el('p','amb-item',item.name+(item.format?' '+item.format:'')+' × '+item.quantity+' — '+money(item.line_cents)));
+   const gross=items.reduce((sum,item)=>sum+item.line_cents,0);if(gross>c.basis_cents)row.append(el('p','journal-caption','Réduction sur les produits : −'+money(gross-c.basis_cents)));
+   row.append(el('p','','Produits payés : '+money(c.basis_cents)),el('strong','','Commission à 10 % : '+money(c.amount_cents)),el('p','journal-caption',c.first_order?'Premier achat du client':'Commande suivante'));if(c.reason)row.append(el('p','journal-caption',c.reason));
    if(admin&&c.order_reference)row.append(el('p','journal-caption','Commande : '+c.order_reference));if(admin&&c.status!=='void')row.append(button('Annuler cette commission',()=>voidCommission(data.ambassador.id,c.id),'journal-delete'));wrap.append(row);
   }
   wrap.append(el('h2','','Versements enregistrés'));
