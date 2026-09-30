@@ -24,6 +24,13 @@ def install_delivery(app, db, User, shop):
     shop['launcher_tick'] = launcher_tick
     Order, Outbox = shop["Order"], shop["Outbox"]
 
+    def is_gift_order(order):
+        gifts = app.extensions.get('nyx_gifts', {})
+        check = shop.get('is_gift_order') or gifts.get('is_gift_order')
+        if callable(check):
+            return bool(check(order))
+        return bool(getattr(order, 'is_gift', False) or order.status == 'gifted')
+
     def sheets_session():
         from google.oauth2 import service_account
         from google.auth.transport.requests import AuthorizedSession
@@ -74,7 +81,13 @@ def install_delivery(app, db, User, shop):
         user = db.session.get(User, order.user_id)
         from datetime import datetime, timezone
         c = order.contact
-        data = [order.reference, datetime.fromtimestamp(order.created_at, timezone.utc).isoformat(), order.status,
+        gift = is_gift_order(order)
+        sheet_status = order.status
+        if gift:
+            progress = {'shipped': 'expédiée', 'available': 'disponible au retrait', 'delivered': 'livrée',
+                        'cancelled': 'annulée'}.get(order.status)
+            sheet_status = 'offerte' + (' · ' + progress if progress else '')
+        data = [order.reference, datetime.fromtimestamp(order.created_at, timezone.utc).isoformat(), sheet_status,
                 str(user.telegram_id), user.username or "", c["first_name"], c["last_name"], c["email"], c["phone"],
                 c["address"], c["address_extra"], c["postal_code"], c["city"], c["country"], c["discovery"],
                 " | ".join(f"{x['quantity']} × {x['name']} {x['format']} ({x['unit_cents']/100:.2f} €)" for x in order.lines),
@@ -95,7 +108,19 @@ def install_delivery(app, db, User, shop):
         heading = messages.get(event, "Paiement reçu — montant à vérifier" if event.startswith('payment_received') else event)
         if customer and event == "created":
             heading = "Votre commande est enregistrée — paiement en attente"
-        if event == "payment_help":
+        gift = is_gift_order(order)
+        if gift:
+            gift_messages = {
+                'created': 'Votre cadeau est enregistré — préparation en cours' if customer else 'Commande cadeau enregistrée — offerte',
+                'gifted': 'Votre cadeau est enregistré — préparation en cours' if customer else 'Commande cadeau enregistrée — offerte',
+                'paid': 'Votre cadeau est confirmé — préparation en cours' if customer else 'Commande cadeau confirmée — offerte',
+                'shipped': 'Votre cadeau a été expédié' if customer else 'Cadeau expédié',
+                'available': 'Votre cadeau est disponible au point de retrait / locker' if customer else 'Cadeau disponible au retrait',
+                'delivered': 'Votre cadeau a été livré' if customer else 'Cadeau livré',
+                'cancelled': 'Commande cadeau annulée',
+            }
+            heading = gift_messages.get(event, 'Mise à jour de votre cadeau' if customer else 'Mise à jour de la commande cadeau')
+        if event == "payment_help" and not gift:
             # Delivery may happen after payment, cancellation or expiry. Describe
             # the current order without suggesting that this old request renews
             # a reservation or reverses a payment already validated.
@@ -109,6 +134,8 @@ def install_delivery(app, db, User, shop):
                 help_status = "Demande antérieure — paiement validé depuis"
             heading += "\n" + help_status
         text = f"{heading}\n{order.reference}\nTotal : {order.total_cents / 100:.2f} €"
+        if gift:
+            text += '\nProduits et livraison offerts.'
         contact_url = None
         contact_details = None
         if not customer:

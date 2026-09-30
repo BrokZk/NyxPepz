@@ -1,0 +1,31 @@
+/* Gift surfaces share the app palette without adding animation or blur. */
+.gift-space{--gift-gold:#e4cc94;--gift-muted:#aab8cb;--gift-border:rgba(192,210,236,.19)}
+.gift-space [hidden],.gift-shortcut[hidden],#cart [hidden]{display:none!important}
+.gift-intro{color:#b8c6d9;line-height:1.65;margin:0 0 22px;max-width:52ch}
+.gift-card{background:linear-gradient(145deg,rgba(25,37,57,.96),rgba(11,20,34,.98));border:1px solid var(--gift-border,rgba(192,210,236,.19));border-radius:22px;padding:20px;margin:14px 0;color:#edf3ff;overflow-wrap:anywhere}
+.gift-card h2{font-size:19px;margin:0 0 14px}.gift-card h3{font-size:15px;margin:24px 0 12px}
+.gift-card p{line-height:1.6}.gift-caption{font-size:12px!important;color:#aab8cb;line-height:1.65;margin:10px 0}
+.gift-space label{display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:600;margin:15px 0;min-width:0}
+.gift-space input,.gift-space select,.gift-space textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box;background:#0e192a;color:#eef4ff;border:1px solid #3a4a61;border-radius:12px;padding:13px;font:inherit;font-size:16px}
+.gift-space input:focus-visible,.gift-space select:focus-visible,.gift-space textarea:focus-visible,.gift-space button:focus-visible{outline:2px solid #e4cc94;outline-offset:3px}
+.gift-space input::placeholder{color:#95a3b9}.gift-space fieldset{border:0;margin:0;padding:0;min-width:0}
+.gift-space button{font:inherit;cursor:pointer;white-space:normal}.gift-space button:disabled{opacity:.5;cursor:default}
+.gift-primary,.gift-secondary,.gift-link{min-height:44px;border-radius:12px;padding:12px 16px;font-weight:700!important;line-height:1.35;max-width:100%}
+.gift-primary{border:1px solid #e4cc94;background:linear-gradient(120deg,#e8d6ac,#c6ad7a);color:#142034!important}
+.gift-secondary{border:1px solid #51637d;background:#1b2a43;color:#f3f6ff!important}
+.gift-link{border:0;background:transparent;color:#d2dfef!important;padding:10px 4px;text-decoration:underline;text-underline-offset:4px}
+.gift-toolbar,.gift-actions,.gift-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.gift-actions{justify-content:flex-start;margin-top:16px}.gift-toolbar h2{font-size:19px;margin:0}
+.gift-pagination{margin:18px 0;font-size:12px}.gift-pagination button{font-size:12px}.gift-notice{padding:14px 16px;background:#20334d;border:1px solid #56708d;border-radius:14px;color:#e2ebf9;line-height:1.6;font-size:13px;overflow-wrap:anywhere}
+.gift-tag,.gift-order-badge{display:inline-flex;border-radius:8px;background:#26382f;color:#c7e9d1;padding:6px 9px;font-size:11px;font-weight:700;line-height:1.4;margin:0 0 8px;max-width:100%}
+.gift-tag[data-state="revoked"]{background:#41333e;color:#ead0d8}.gift-tag[data-state="claimed"]{background:#28384d;color:#d1dff0}
+.gift-products{list-style:none;margin:15px 0;padding:0}.gift-products li{padding:10px 0;border-bottom:1px solid rgba(183,202,230,.12);display:flex;gap:12px;align-items:center;justify-content:space-between}.gift-products strong{display:block;font-size:15px}.gift-products small{display:block;margin-top:5px;color:#b3bfd1;font-size:12px}.gift-products b{color:#e4cc94;white-space:nowrap}
+.gift-total{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid rgba(228,204,148,.28);padding-top:15px;margin:18px 0;color:#ccdae9;font-size:13px}.gift-total strong{font-size:30px;color:#e4cc94}
+.gift-code{padding:15px;background:#0b1422;border:1px dashed #817354;border-radius:13px;color:#ead5a5;word-break:break-all;letter-spacing:1px;font-size:16px}
+.gift-shortcut{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:7px;text-align:left;border:1px solid #655a45;border-radius:16px;padding:16px;background:linear-gradient(125deg,#222b3a,#151e2c);color:#d8e0ee;margin:14px 0;font:inherit;cursor:pointer}.gift-shortcut span{font-size:12px}.gift-shortcut b{font-size:14px;color:#e4cc94}
+.gift-user{width:100%;display:flex;flex-direction:column;gap:5px;text-align:left;background:#101e31;border:1px solid #34465e;border-radius:12px;padding:13px;color:#eff5ff;margin:8px 0;font-size:14px}.gift-user small{color:#b2c0d3;font-size:11px}
+.gift-recipient{border:1px solid #998354;background:#2a2e30;padding:16px;border-radius:14px;margin:15px 0}.gift-recipient strong{display:block}.gift-recipient small{display:block;margin-top:6px;color:#d1d9e8;font-size:12px}
+.gift-product-row{padding:12px;background:#0d192a;border:1px solid #33445d;border-radius:14px;margin:12px 0}.gift-product-row label{margin-top:4px}.gift-product-controls{display:flex;gap:15px;align-items:center;justify-content:space-between}.gift-product-controls label{max-width:90px;margin-bottom:4px}.gift-product-controls button{color:#d7bc9b!important}
+.gift-applied{border-color:#8a7850}.gift-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#giftCreateForm .gift-primary,#giftLookup .gift-secondary{width:100%}#giftAdminDetailContent .gift-card>h2{overflow-wrap:anywhere}#cartGiftForm{margin:18px 0}#cartGiftNotice{margin-bottom:0}
+.ao-status-gifted{background:#26382f!important;color:#c7e9d1!important}
+@media(max-width:360px){.gift-card{padding:16px}.gift-pagination{gap:6px}.gift-pagination button{padding:10px}.gift-fields{grid-template-columns:1fr}.gift-primary,.gift-secondary{padding:12px}.gift-actions>*{width:100%}}

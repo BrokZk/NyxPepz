@@ -7,7 +7,7 @@
  const money=c=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format((c||0)/100);
  const date=t=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(t*1000));
  const countries={FR:'France',BE:'Belgique',ES:'Espagne'};
- const groups={preparing:['Bordereaux à faire','Paiement validé : préparez les étiquettes Mondial Relay avec les coordonnées de chaque commande.','Aucun bordereau à faire.'],payments:['Paiements','Les paiements en attente ou à vérifier sont regroupés ici.','Aucun paiement en attente ou à vérifier.'],ready:['Prêts à envoyer','Les bordereaux sont faits. Marquez les colis expédiés après leur dépôt.','Aucun colis prêt à envoyer.'],shipping:['En livraison','Colis expédiés ou disponibles au point de retrait.','Aucun colis en livraison.'],history:['Historique','Toutes les commandes dont le paiement a été validé, avec leur état actuel.','Aucune commande payée dans l’historique.']};
+ const groups={preparing:['Bordereaux à faire','Commandes payées ou offertes : préparez les étiquettes Mondial Relay avec les coordonnées de chaque commande.','Aucun bordereau à faire.'],payments:['Paiements','Les paiements en attente ou à vérifier sont regroupés ici.','Aucun paiement en attente ou à vérifier.'],ready:['Prêts à envoyer','Les bordereaux sont faits. Marquez les colis expédiés après leur dépôt.','Aucun colis prêt à envoyer.'],shipping:['En livraison','Colis expédiés ou disponibles au point de retrait.','Aucun colis en livraison.'],history:['Historique','Toutes les commandes payées ou offertes, avec leur état actuel.','Aucune commande payée ou offerte dans l’historique.']};
  let group='preparing',cursors=[null],page=0,next=null,selected=null,selectedRef=null;
  let listSeq=0,detailSeq=0,listController,detailController,loading=false,busy=false,verified=false,dirty=true,loaded=false,scroll=0,returnRef=null;
  const active=()=>root.classList.contains('active');
@@ -18,8 +18,8 @@
  }
  function cancelList(){listSeq++;listController?.abort();}
  function cancelDetail(){detailSeq++;detailController?.abort();}
- function status(o){return o.status==='paid'?(o.preparation?.prepared?'Prêt à envoyer':'Bordereau à faire'):o.status_label;}
- function stage(o){return o.status==='paid'?(o.preparation?.prepared?'ready':'preparing'):['awaiting_payment','payment_review'].includes(o.status)?'payments':['shipped','available'].includes(o.status)?'shipping':'history';}
+ function status(o){return ['paid','gifted'].includes(o.status)?(o.preparation?.prepared?'Prêt à envoyer':'Bordereau à faire'):o.status_label;}
+ function stage(o){return ['paid','gifted'].includes(o.status)?(o.preparation?.prepared?'ready':'preparing'):['awaiting_payment','payment_review'].includes(o.status)?'payments':['shipped','available'].includes(o.status)?'shipping':'history';}
  function person(o){return [o.contact.first_name,o.contact.last_name].filter(Boolean).join(' ')||'Client';}
  function controls(){
   get('aoPrevious').disabled=loading||busy||page===0;get('aoNext').disabled=loading||busy||!next;
@@ -32,7 +32,8 @@
  function row(o){
   const li=el('li'),b=button('',()=>openDetail(o.reference),'ao-order-row');b.dataset.reference=o.reference;b.disabled=busy;
   const top=el('span','ao-row-top');top.append(el('strong','',person(o)),el('b','',money(o.total_cents)));
-  const middle=el('span','ao-row-middle');middle.append(el('span','ao-badge ao-status-'+o.status,status(o)),el('span','ao-row-arrow','›'));
+  const middle=el('span','ao-row-middle');if(o.is_gift)b.append(el('span','gift-order-badge','Cadeau · offert'));
+  middle.append(el('span','ao-badge ao-status-'+o.status,status(o)),el('span','ao-row-arrow','›'));
   const bottom=el('small','ao-row-meta',date(o.created_at)+' · '+o.reference);
   b.setAttribute('aria-label','Ouvrir la commande de '+person(o)+', '+status(o)+', '+money(o.total_cents)+', '+o.reference);
   b.append(top,middle,bottom);if(o.payment_help_requested)b.append(el('small','ao-help-request','Autre paiement demandé'));
@@ -50,7 +51,7 @@
    if(!data.orders.length&&page>0){page--;cursors.length=page+1;return loadList({restore});}
    loaded=true;dirty=false;next=data.next_before;get('aoList').replaceChildren(...data.orders.map(row));
    get('aoListStatus').textContent=data.orders.length?(data.orders.length+' commande'+(data.orders.length===1?'':'s')+' sur cette page'):groups[group][2];
-   if(!data.orders.length)get('aoList').append(el('li','ao-empty',group==='preparing'?'Une commande apparaît ici dès que son paiement est validé.':groups[group][1]));
+   if(!data.orders.length)get('aoList').append(el('li','ao-empty',group==='preparing'?'Les commandes payées et les cadeaux confirmés apparaissent ici.':groups[group][1]));
    get('aoPagination').hidden=!data.orders.length;if(restore)restoreList();
   }catch(e){if(e.name==='AbortError'||seq!==listSeq||!active())return;dirty=true;get('aoListStatus').textContent='Liste indisponible';note('aoListError',e.message);get('aoRetry').hidden=false;}
   finally{if(seq===listSeq){loading=false;get('aoList').setAttribute('aria-busy','false');controls();}}
@@ -88,6 +89,7 @@
  function renderDetail(){
   const o=selected,host=get('aoDetailBody');host.replaceChildren();
   const header=el('div','ao-detail-heading');header.append(el('span','ao-badge ao-status-'+o.status,status(o)));
+  if(o.is_gift)header.append(el('span','gift-order-badge','Cadeau · produit et livraison offerts'));
   const title=el('h1','',person(o));title.tabIndex=-1;header.append(title,el('p','ao-muted',o.reference+' · '+date(o.created_at)));host.append(header);
   const contact=el('section','ao-card');contact.append(el('h2','','Coordonnées de livraison'));
   const c=o.contact,address=[c.address,c.address_extra,[c.postal_code,c.city].filter(Boolean).join(' '),countries[c.country]||c.country].filter(Boolean).join('\n');
@@ -101,9 +103,9 @@
    const username=typeof o.username==='string'&&/^[A-Za-z0-9_]{5,32}$/.test(o.username)?o.username:null,id=String(o.telegram_id||'');
    if(username||/^[0-9]+$/.test(id)){const a=el('a','ao-secondary','Contacter sur Telegram ↗');a.href=username?'https://t.me/'+username:'tg://user?id='+id;a.target='_blank';a.rel='noopener noreferrer';help.append(a);}host.append(help);
   }
-  const payment=el('details','ao-card ao-payment-proof');payment.append(el('summary','','Détails du paiement'));
+  const payment=el('details','ao-card ao-payment-proof');payment.append(el('summary','',o.is_gift?'Commande offerte':'Détails du paiement'));
   for(const p of o.payments||[])payment.append(el('p','ao-evidence','Reçu : '+p.amount+' '+p.coin+'\nVersé : '+p.forwarded_amount+'\nTransaction : '+p.transaction_id));
-  if(o.payment_note)payment.append(el('p','',o.payment_note));if(!o.payment_note&&!o.payments?.length)payment.append(el('p','ao-muted','Aucun paiement reçu à vérifier pour le moment.'));host.append(payment);
+  if(o.payment_note)payment.append(el('p','',o.payment_note));if(!o.payment_note&&!o.payments?.length)payment.append(el('p','ao-muted',o.is_gift?'Produit et livraison offerts. Aucun paiement à encaisser.':'Aucun paiement reçu à vérifier pour le moment.'));host.append(payment);
   const actions=el('section','ao-card ao-workflow');host.append(actions);
   if(o.status==='awaiting_payment'){
    actions.append(el('h2','','En attente de paiement'),el('p','ao-muted','Le bordereau sera à préparer après réception et validation du paiement.'));
@@ -113,17 +115,17 @@
    amount.input.inputMode='decimal';amount.input.required=true;amount.input.placeholder='Montant vérifié en euros';reference.input.required=true;reference.input.minLength=3;reference.input.maxLength=300;reference.input.placeholder='Ex. Reçu — référence de transaction';
    fieldset.append(amount.wrapper,reference.wrapper,formButton('Valider le paiement'));form.append(fieldset);
    form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const value=amount.input.value.trim().replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(value)){note('aoDetailError','Indiquez un montant en euros avec au maximum deux décimales.');get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});return;}mutate('confirm-payment',{confirmed_total_cents:Math.round(Number(value)*100),note:reference.input.value.trim()},'Paiement validé. Le bordereau est à faire.','preparing');};actions.append(form);
-  }else if(o.status==='paid'&&!o.preparation?.prepared){
+  }else if(['paid','gifted'].includes(o.status)&&!o.preparation?.prepared){
    actions.append(el('h2','','Bordereau à faire'),el('p','ao-muted','Créez votre étiquette dans Mondial Relay avec les coordonnées ci-dessus. Une fois l’étiquette prête, marquez cette étape comme terminée.'),action('Bordereau fait',()=>mutate('preparation',{prepared:true},'Bordereau enregistré comme fait. Le colis est prêt à envoyer.','ready'),true));
-  }else if(o.status==='paid'||['shipped','available'].includes(o.status)){
-   if(o.status==='paid'){actions.append(el('h2','','Prêt à envoyer'),el('p','ao-muted','Bordereau fait'+(o.preparation?.prepared_at?' le '+date(o.preparation.prepared_at):'')+'. Confirmez l’expédition lorsque le colis a été déposé.'));}
+  }else if(['paid','gifted'].includes(o.status)||['shipped','available'].includes(o.status)){
+   if(['paid','gifted'].includes(o.status)){actions.append(el('h2','','Prêt à envoyer'),el('p','ao-muted','Bordereau fait'+(o.preparation?.prepared_at?' le '+date(o.preparation.prepared_at):'')+'. Confirmez l’expédition lorsque le colis a été déposé.'));}
    else actions.append(el('h2','','Mettre à jour la livraison'));
    const form=el('form'),fieldset=el('fieldset');fieldset.dataset.aoMutate='';const tracking=field('Numéro de suivi Mondial Relay','aoTracking','text',o.tracking_number||'');tracking.input.required=true;tracking.input.pattern='[A-Za-z0-9-]{4,64}';tracking.input.maxLength=64;tracking.input.autocomplete='off';tracking.input.spellcheck=false;
    let select=null;fieldset.append(tracking.wrapper);
    if(o.status==='shipped'){const label=el('label','','Nouveau statut');select=el('select');select.id='aoShippingStatus';select.required=true;for(const [value,text] of [['','Choisir un statut'],['available','Disponible au point de retrait'],['delivered','Livré']]){const option=el('option','',text);option.value=value;select.append(option);}label.append(select);fieldset.append(label);}
-   const label=o.status==='paid'?'Confirmer l’expédition':o.status==='available'?'Marquer comme livré':'Enregistrer le statut';fieldset.append(formButton(label));form.append(fieldset);
-   form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const state=o.status==='paid'?'shipped':o.status==='available'?'delivered':select.value;mutate('shipping',{tracking_number:tracking.input.value.trim(),status:state},state==='delivered'?'Commande marquée comme livrée.':'Livraison mise à jour.',state==='delivered'?'history':'shipping');};actions.append(form);
-   if(o.status==='paid')actions.append(action('Remettre dans les bordereaux à faire',()=>mutate('preparation',{prepared:false},'La commande est de nouveau dans les bordereaux à faire.','preparing')));
+   const label=['paid','gifted'].includes(o.status)?'Confirmer l’expédition':o.status==='available'?'Marquer comme livré':'Enregistrer le statut';fieldset.append(formButton(label));form.append(fieldset);
+   form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const state=['paid','gifted'].includes(o.status)?'shipped':o.status==='available'?'delivered':select.value;mutate('shipping',{tracking_number:tracking.input.value.trim(),status:state},state==='delivered'?'Commande marquée comme livrée.':'Livraison mise à jour.',state==='delivered'?'history':'shipping');};actions.append(form);
+   if(['paid','gifted'].includes(o.status))actions.append(action('Remettre dans les bordereaux à faire',()=>mutate('preparation',{prepared:false},'La commande est de nouveau dans les bordereaux à faire.','preparing')));
   }else{actions.append(el('h2','',o.status_label));if(o.tracking_number)contactField(actions,'Numéro de suivi',o.tracking_number);}
   controls();
  }

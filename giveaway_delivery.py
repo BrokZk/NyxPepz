@@ -43,7 +43,7 @@ def _plain(value, limit):
     return re.sub(r"[\x00-\x1f\x7f]", " ", value if isinstance(value, str) else "").strip()[:limit]
 
 
-def _payload(winner, giveaway):
+def _payload(winner, giveaway, gift=None):
     prize = winner.prize
     if (not isinstance(prize, dict) or not _plain(prize.get("name"), 160)
             or type(prize.get("quantity")) is not int or prize["quantity"] < 1
@@ -55,9 +55,22 @@ def _payload(winner, giveaway):
     text = ("🎉 Félicitations" + (", " + name if name else "") + " !\n\n"
             + "Vous avez gagné au concours « " + _plain(giveaway.title, 160) + " ».\n"
             + "Classement : " + place + " place\n"
-            + "Votre lot : " + str(prize["quantity"]) + " × " + product + "\n\n"
-            + "Retrouvez votre lot dans l’application NyxPepz et contactez l’organisateur "
-            + "pour organiser sa remise.")
+            + "Votre lot : " + str(prize["quantity"]) + " × " + product + "\n\n")
+    if gift and gift.get('status') == 'active' and _plain(gift.get('code'), 80):
+        text += ("Votre code cadeau personnel : " + _plain(gift['code'], 80) + "\n"
+                 "Votre lot et sa livraison sont offerts : total 0 €.\n"
+                 "Ouvrez l’application NyxPepz, ajoutez le lot indiqué à votre panier, "
+                 "puis saisissez votre code cadeau et renseignez votre adresse pour le recevoir. "
+                 "Ce code est lié à votre compte Telegram et s’utilise une seule fois.")
+    elif gift and gift.get('status') == 'claimed':
+        text += ("Votre cadeau a déjà été commandé, avec livraison offerte et un total de 0 €. "
+                 "Retrouvez son suivi dans l’application NyxPepz.")
+    elif gift and gift.get('status') == 'revoked':
+        text += "Ce cadeau a été annulé. Contactez NyxPepz pour vérifier la remise de votre lot."
+    else:
+        # Old draws stay unchanged; sending a notification never creates a gift.
+        text += ("Retrouvez votre lot dans l’application NyxPepz et contactez l’organisateur "
+                 "pour organiser sa remise.")
     payload = {"chat_id": winner.telegram_id, "text": text}
     url = _app_url()
     if url:
@@ -191,7 +204,9 @@ def install_giveaway_delivery(app, db, giveaways):
                     finish(winner_id, lease_token, "blocked",
                            "missing_telegram_id" if winner.telegram_id is None else "invalid_telegram_id")
                     continue
-                payload = _payload(winner, giveaway)
+                gifts = app.extensions.get('nyx_gifts')
+                gift = gifts['describe_for_winner'](winner, admin=True) if gifts else None
+                payload = _payload(winner, giveaway, gift)
                 if payload is None:
                     finish(winner_id, lease_token, "failed", "invalid_prize")
                     continue

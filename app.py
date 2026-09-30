@@ -295,6 +295,7 @@ def admin_delete_user(uid):
         JournalEntry.query.filter_by(user_id=uid).delete()
         nutrition['purge_user'](uid)
         giveaways['purge_user'](uid)
+        gifts['purge_user'](uid)
         db.session.delete(u)
         db.session.commit()
     except SQLAlchemyError:
@@ -461,6 +462,10 @@ def order_confirmed():
   if not u:return jsonify(error="Utilisateur inconnu"),404
   db.session.execute(update(User).where(User.id==u.id).values(loyalty_points=User.loyalty_points))
   db.session.refresh(u)
+  gift_order=shop['Order'].query.filter_by(reference=oid.strip().upper()).first()
+  if gift_order and gifts['is_gift_order'](gift_order):
+   db.session.rollback()
+   return jsonify(error="Une commande cadeau ne donne pas de crédit d’achat"),409
   # One referral credit per person, only on their first paid order.
   first_paid=ConfirmedOrderEvent.query.filter_by(user_id=u.id).first() is None
   # The unique insert claims the order before any balance is changed.
@@ -550,9 +555,11 @@ def reconcile_referrals(repair):
 
 from shop import install_shop
 shop = install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent, current_user, require_admin, pack_shop)
+from gifts import install_gifts
+gifts = install_gifts(app, db, User, Product, shop, current_user, require_admin)
 from giveaways import install_giveaways
 def giveaway_customer_eligible(uid):
- return bool(ConfirmedOrderEvent.query.filter_by(user_id=uid).first() or shop['Order'].query.filter(shop['Order'].user_id==uid,shop['Order'].status.in_(['paid','shipped','available','delivered'])).first())
+ return bool(ConfirmedOrderEvent.query.filter_by(user_id=uid).first() or shop['Order'].query.filter(shop['Order'].user_id==uid,shop['Order'].status.in_(['paid','shipped','available','delivered']),~gifts['order_clause'](shop['Order'].id)).first())
 giveaways=install_giveaways(app,db,User,Product,current_user,require_admin,customer_eligible=giveaway_customer_eligible)
 from giveaway_delivery import install_giveaway_delivery
 install_giveaway_delivery(app,db,giveaways)

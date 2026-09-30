@@ -23,7 +23,7 @@ SHIPPING = {"FR": 500, "BE": 500, "ES": 1000}
 COUNTRIES = {"FR": "France", "BE": "Belgique", "ES": "Espagne"}
 REWARDS = {150: 1000, 300: 2500, 500: 5000, 750: 8000}
 STATUSES = {"awaiting_payment": "En attente de paiement", "payment_review": "Paiement reçu — vérification",
-            "paid": "Payée", "shipped": "Expédiée", "available": "Disponible au point de retrait",
+            "paid": "Payée", "gifted": "Cadeau offert — à préparer", "shipped": "Expédiée", "available": "Disponible au point de retrait",
             "delivered": "Livrée", "cancelled": "Annulée", "expired": "Réservation expirée"}
 
 
@@ -133,6 +133,10 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         # Keep this history after successful delivery, cancellation or expiry.
         return ShopOutbox.query.filter_by(order_id=order.id, kind="telegram_payment_help").first() is not None
 
+    def is_gift_order(order):
+        gifts = app.extensions.get('nyx_gifts')
+        return bool(gifts and gifts['is_gift_order'](order))
+
     @app.after_request
     def private_shop_response(response):
         if request.path.startswith('/api/shop/') and request.path not in ('/api/shop/config', '/api/shop/paygate/callback'):
@@ -159,8 +163,11 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     def serialize(order, admin=False):
         requested_help = payment_help_requested(order)
-        awaiting_payment = order.status == "awaiting_payment" and order.expires_at > int(time.time())
+        gifts = app.extensions.get('nyx_gifts')
+        gift_id = gifts['order_gift_id'](order) if gifts else None
+        awaiting_payment = gift_id is None and order.status == "awaiting_payment" and order.expires_at > int(time.time())
         data = {"reference": order.reference, "lines": order.lines,
+                "is_gift": gift_id is not None, "gift_id": gift_id,
                 "subtotal_cents": order.subtotal_cents, "shipping_cents": order.shipping_cents,
                 "total_cents": order.total_cents, "status": order.status,
                 "discount_cents": order.discount_cents, "reward_points": order.reward_points,
@@ -270,7 +277,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         # One durable entry per event and destination; workers never recreate orders.
         destinations = [] if event == "payment_help" else [("sheets", "")]
         destinations += [("telegram_" + event, recipient) for recipient in (admin_recipients() if recipients is None else recipients)]
-        if event in ("created", "paid", "shipped", "available", "delivered"):
+        if event in ("created", "paid", "gifted", "shipped", "available", "delivered"):
             user = db.session.get(User, order.user_id)
             if user:
                 destinations.append(("client_" + event, str(user.telegram_id)))
@@ -530,6 +537,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         order = ShopOrder.query.filter_by(reference=request.args.get("order", "")).first()
         if not order or not hmac.compare_digest(order.payment_nonce, request.args.get("nonce", "")):
             return fail("Commande introuvable", 404)
+        if is_gift_order(order):
+            return fail("Cette commande cadeau ne nécessite aucun paiement", 409)
         if not order.receiving_wallet or order.receiving_wallet != request.args.get("address_in", "").lower():
             return fail("Adresse de réception incorrecte", 409)
         try:
@@ -569,6 +578,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return fail("Confirmation temporairement indisponible", 503)
 
     def credit_order(order):
+        if is_gift_order(order):
+            raise ValueError("Une commande cadeau ne donne pas de crédit d’achat")
         user = db.session.get(User, order.user_id)
         db.session.execute(update(User).where(User.id == user.id).values(loyalty_points=User.loyalty_points))
         db.session.refresh(user)
@@ -604,10 +615,10 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
     def admin_orders():
         if not require_admin():
             return fail("Interdit", 403)
-        groups = {'action': ('awaiting_payment', 'payment_review', 'paid'),
-                  'preparing': ('paid',), 'ready': ('paid',),
+        groups = {'action': ('awaiting_payment', 'payment_review', 'paid', 'gifted'),
+                  'preparing': ('paid', 'gifted'), 'ready': ('paid', 'gifted'),
                   'payments': ('awaiting_payment', 'payment_review'),
-                  'shipping': ('shipped', 'available'), 'history': ('paid', 'shipped', 'available', 'delivered')}
+                  'shipping': ('shipped', 'available'), 'history': ('paid', 'gifted', 'shipped', 'available', 'delivered')}
         group = request.args.get('group')
         try:
             limit = int(request.args.get('limit', '50'))
@@ -654,6 +665,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if not order:
             return fail("Commande introuvable", 404)
         try:
+            if is_gift_order(order):
+                return fail("Cette commande cadeau ne nécessite aucune validation de paiement", 409)
             if order.status in ("paid", "shipped", "available", "delivered"):
                 return jsonify(order=serialize(order, True), duplicate=True)
             if type(payload.get("confirmed_total_cents")) is not int or payload["confirmed_total_cents"] != order.total_cents:
@@ -698,12 +711,12 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             # Serialize preparation with the existing conditional shipment update.
             # A waiting request must recheck that the order is still paid.
             changed = db.session.execute(update(ShopOrder).where(
-                ShopOrder.reference == reference, ShopOrder.status == "paid"
+                ShopOrder.reference == reference, ShopOrder.status.in_(("paid", "gifted"))
             ).values(status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
             if not changed:
                 if not ShopOrder.query.filter_by(reference=reference).first():
                     return fail("Commande introuvable", 404)
-                return fail("Seules les commandes payées non expédiées peuvent être préparées", 409)
+                return fail("Seules les commandes payées ou offertes non expédiées peuvent être préparées", 409)
             order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
             preparation = ShopPreparation.query.filter_by(order_id=order.id).populate_existing().first()
             if payload["prepared"] and preparation is None:
@@ -729,7 +742,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         order = ShopOrder.query.filter_by(reference=reference).first()
         if not order:
             return fail("Commande introuvable", 404)
-        allowed = {"shipped": ("paid",), "available": ("shipped",), "delivered": ("shipped", "available")}
+        allowed = {"shipped": ("paid", "gifted"), "available": ("shipped",), "delivered": ("shipped", "available")}
         try:
             if order.status == status and order.tracking_number == number:
                 return jsonify(order=serialize(order, True), duplicate=True)
@@ -749,5 +762,6 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
         "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation,
-        "serialize": serialize, "expire": expire_orders}
+        "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
+        "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
     return app.extensions["nyx_shop"]

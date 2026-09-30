@@ -144,7 +144,11 @@ def install_giveaways(app, db, User, Product, current_user, require_admin, custo
                     first_name=row.first_name, username=row.username, notification_state=row.notification_state,
                     notification_attempts=row.notification_attempts, notification_next_attempt=row.notification_next_attempt,
                     notification_error=row.notification_error, notified_at=row.notified_at,
-                    telegram_message_id=row.telegram_message_id)
+                    telegram_message_id=row.telegram_message_id, gift=winner_gift(row, admin=True))
+
+    def winner_gift(row, user=None, admin=False):
+        gifts = app.extensions.get('nyx_gifts')
+        return gifts['describe_for_winner'](row, user=user, admin=admin) if gifts else None
 
     def giveaway_json(row, user, admin=False, detail=False):
         own = current_entry(row.id, user.id)
@@ -161,7 +165,8 @@ def install_giveaways(app, db, User, Product, current_user, require_admin, custo
                       participation_status=(own.status if own.active else 'withdrawn') if own else None,
                       can_join=bool(is_open and not admin and not (own and own.active)),
                       can_withdraw=bool(is_open and own and own.active),
-                      my_result={'rank': own_winner.rank, 'prize': own_winner.prize} if own_winner else None)
+                      my_result={'rank': own_winner.rank, 'prize': own_winner.prize,
+                                 'gift': winner_gift(own_winner, user=user)} if own_winner else None)
         if admin:
             result['pending_count'] = GiveawayEntry.query.filter_by(giveaway_id=row.id, active=True, status='pending').count()
             if detail:
@@ -413,12 +418,21 @@ def install_giveaways(app, db, User, Product, current_user, require_admin, custo
                 entries = GiveawayEntry.query.filter_by(giveaway_id=gid, active=True, status='accepted').order_by(GiveawayEntry.id).all()
                 if len(entries) < len(row.prizes):
                     return conflict('Il n’y a pas assez de participants acceptés pour attribuer tous les lots à des personnes distinctes.')
+                gifts = app.extensions.get('nyx_gifts')
+                if not gifts or not callable(gifts.get('issue_for_winner')):
+                    db.session.rollback()
+                    return jsonify(error='La création des cadeaux est temporairement indisponible. Réessayez le tirage.'), 503
                 chosen = secrets.SystemRandom().sample(entries, len(row.prizes))
                 for rank, (entry, prize) in enumerate(zip(chosen, row.prizes), 1):
-                    db.session.add(GiveawayWinner(giveaway_id=gid, entry_id=entry.id, user_id=entry.user_id,
+                    winner = GiveawayWinner(giveaway_id=gid, entry_id=entry.id, user_id=entry.user_id,
                                                  telegram_id=entry.telegram_id, first_name=entry.first_name, username=entry.username,
                                                  rank=rank, prize=prize, notification_state='pending', notification_attempts=0,
-                                                 notification_next_attempt=0, notification_lease_until=0))
+                                                 notification_next_attempt=0, notification_lease_until=0)
+                    db.session.add(winner)
+                    db.session.flush()
+                    # Gift creation and the immutable draw succeed or roll back together.
+                    # The existing drawn replay returns above, without issuing old gifts.
+                    gifts['issue_for_winner'](winner)
                 row.status, row.drawn_at = 'drawn', now_ts()
                 row.drawn_participant_count = len(entries)
                 row.closed_at = row.closed_at or row.ends_at
