@@ -70,6 +70,13 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         forwarded_amount = db.Column(db.String(80), nullable=False)
         received_at = db.Column(db.BigInteger, nullable=False)
 
+    class ShopPreparation(db.Model):
+        # A separate, optional row also supports orders paid before this feature.
+        # Preparing a label never changes payment or shipment state.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        prepared_at = db.Column(db.BigInteger, nullable=False)
+        prepared_by_telegram_id = db.Column(db.BigInteger, nullable=False)
+
     class ShopProfile(db.Model):
         user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
         contact = db.Column(db.JSON, nullable=False)
@@ -165,8 +172,11 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "can_request_payment_help": awaiting_payment and payment_help_available() and not requested_help}
         if admin:
             owner = db.session.get(User, order.user_id)
+            preparation = db.session.get(ShopPreparation, order.id)
             data.update(contact=order.contact, telegram_id=owner.telegram_id if owner else None,
                         username=owner.username if owner else None, payment_note=order.payment_note,
+                        preparation={"prepared": preparation is not None,
+                                     "prepared_at": preparation.prepared_at if preparation else None},
                         payments=[{"coin": p.coin, "amount": p.amount, "forwarded_amount": p.forwarded_amount,
                                    "transaction_id": p.transaction_id} for p in ShopPayment.query.filter_by(order_id=order.id)],
                         sync_pending=ShopOutbox.query.filter(ShopOutbox.order_id == order.id, ShopOutbox.state != "done").count())
@@ -595,21 +605,43 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if not require_admin():
             return fail("Interdit", 403)
         groups = {'action': ('awaiting_payment', 'payment_review', 'paid'),
+                  'preparing': ('paid',), 'ready': ('paid',),
+                  'payments': ('awaiting_payment', 'payment_review'),
                   'shipping': ('shipped', 'available'), 'history': ('paid', 'shipped', 'available', 'delivered')}
         group = request.args.get('group')
+        try:
+            limit = int(request.args.get('limit', '50'))
+        except (TypeError, ValueError):
+            return fail('Taille de page invalide')
+        if not 1 <= limit <= 50:
+            return fail('Taille de page invalide')
         query = ShopOrder.query
         if group is not None:
             if group not in groups:
                 return fail('Filtre invalide')
             query = query.filter(ShopOrder.status.in_(groups[group]))
+            if group in ('preparing', 'ready'):
+                prepared = db.session.query(ShopPreparation.order_id).filter(
+                    ShopPreparation.order_id == ShopOrder.id).exists()
+                query = query.filter(prepared if group == 'ready' else ~prepared)
         before = request.args.get('before', type=int)
         if before:
             query = query.filter(ShopOrder.id < before)
-        orders = query.order_by(ShopOrder.id.desc()).limit(51 if group else 200).all()
+        row_limit = limit + 1 if group else (limit if 'limit' in request.args else 200)
+        orders = query.order_by(ShopOrder.id.desc()).limit(row_limit).all()
         if group:
-            return jsonify(orders=[serialize(o, True) for o in orders[:50]],
-                           next_before=orders[49].id if len(orders) > 50 else None)
+            return jsonify(orders=[serialize(o, True) for o in orders[:limit]],
+                           next_before=orders[limit - 1].id if len(orders) > limit else None)
         return jsonify([serialize(o, True) for o in orders])
+
+    @app.get("/api/shop/admin/orders/<reference>")
+    def admin_order_detail(reference):
+        if not require_admin():
+            return fail("Interdit", 403)
+        order = ShopOrder.query.filter_by(reference=reference).first()
+        if not order:
+            return fail("Commande introuvable", 404)
+        return jsonify(order=serialize(order, True))
 
     @app.post("/api/shop/admin/orders/<reference>/confirm-payment")
     def confirm_payment(reference):
@@ -654,6 +686,36 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         except SQLAlchemyError:
             return fail("Validation indisponible ; aucun point crédité partiellement", 503)
 
+    @app.post("/api/shop/admin/orders/<reference>/preparation")
+    def update_preparation(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or type(payload.get("prepared")) is not bool:
+            return fail("État de préparation invalide")
+        try:
+            # Serialize preparation with the existing conditional shipment update.
+            # A waiting request must recheck that the order is still paid.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference, ShopOrder.status == "paid"
+            ).values(status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                if not ShopOrder.query.filter_by(reference=reference).first():
+                    return fail("Commande introuvable", 404)
+                return fail("Seules les commandes payées non expédiées peuvent être préparées", 409)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            preparation = ShopPreparation.query.filter_by(order_id=order.id).populate_existing().first()
+            if payload["prepared"] and preparation is None:
+                db.session.add(ShopPreparation(order_id=order.id, prepared_at=int(time.time()),
+                                               prepared_by_telegram_id=admin.telegram_id))
+            elif not payload["prepared"] and preparation is not None:
+                db.session.delete(preparation)
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Préparation indisponible ; réessayez", 503)
+
     @app.post("/api/shop/admin/orders/<reference>/shipping")
     def update_shipping(reference):
         if not require_admin():
@@ -686,5 +748,6 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         click.echo(f"{expire_orders()} réservations expirées")
 
     app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
-        "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "serialize": serialize, "expire": expire_orders}
+        "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation,
+        "serialize": serialize, "expire": expire_orders}
     return app.extensions["nyx_shop"]
