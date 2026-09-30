@@ -8,12 +8,16 @@
  const date=t=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(t*1000));
  const countries={FR:'France',BE:'Belgique',ES:'Espagne'};
  const groups={preparing:['Bordereaux à faire','Commandes payées ou offertes : préparez les étiquettes Mondial Relay avec les coordonnées de chaque commande.','Aucun bordereau à faire.'],payments:['Paiements','Vérifiez un paiement reçu et validez-le ici, y compris par un autre moyen que PayGate.','Aucun paiement en attente ou à vérifier.'],ready:['Prêts à envoyer','Les bordereaux sont faits. Marquez les colis expédiés après leur dépôt.','Aucun colis prêt à envoyer.'],shipping:['En livraison','Colis expédiés ou disponibles au point de retrait.','Aucun colis en livraison.'],history:['Historique','Toutes les commandes payées ou offertes, avec leur état actuel.','Aucune commande payée ou offerte dans l’historique.'],expired:['Expirées','Si vous avez reçu un paiement après expiration, ouvrez la commande pour le valider. Le stock sera vérifié à nouveau.','Aucune réservation expirée.']};
+ groups.all=['Toutes les commandes','Retrouvez une commande à chaque étape, y compris après son expiration ou son annulation.','Aucune commande enregistrée.'];
  const paymentMethods={crypto:'Cryptomonnaie',bank_transfer:'Virement bancaire',paypal:'PayPal',cash:'Espèces',other:'Autre'};
  const paid=o=>!o.is_gift&&['paid','shipped','available','delivered'].includes(o.status);
  const helpPending=o=>!o.is_gift&&['awaiting_payment','payment_review'].includes(o.status)&&(o.payment_help_pending??o.payment_help_requested);
  const paymentRecord=o=>o.payment_record||{method:o.payments?.length?'crypto':'unknown',label:o.payments?.length?'Cryptomonnaie':'Moyen non renseigné',note:o.payment_note||'',revision:0};
  let group='preparing',cursors=[null],page=0,next=null,selected=null,selectedRef=null;
  let listSeq=0,detailSeq=0,listController,detailController,loading=false,busy=false,verified=false,dirty=true,loaded=false,scroll=0,returnRef=null;
+ let search='',searchTimer=null,summarySeq=0,summaryController=null;
+ const noteDrafts=new Map();
+ const normalizedNote=text=>text.replace(/\r\n?/g,'\n').trim();
  const active=()=>root.classList.contains('active');
  function note(id,text){get(id).textContent=text;get(id).hidden=!text;}
  async function request(url,options={}){
@@ -29,10 +33,21 @@
   get('aoPrevious').disabled=loading||busy||page===0;get('aoNext').disabled=loading||busy||!next;
   get('aoPage').textContent='Page '+(page+1);
   get('aoRefresh').disabled=busy;get('aoRefreshDetail').disabled=busy;
+  get('aoSearch').disabled=busy;get('aoSearchClear').disabled=busy;
   root.querySelectorAll('[data-order-group],.ao-order-row').forEach(b=>{b.disabled=busy;});
   root.querySelectorAll('[data-ao-mutate]').forEach(b=>{b.disabled=busy||!verified;});
  }
- function setGroup(value){if(busy)return;group=value;cursors=[null];page=0;next=null;dirty=true;loadList();}
+ function setGroup(value){if(busy)return;clearTimeout(searchTimer);group=value;cursors=[null];page=0;next=null;dirty=true;loadList();}
+ function changeSearch(immediate=false){
+  if(busy)return;clearTimeout(searchTimer);search=get('aoSearch').value.trim();get('aoSearchClear').hidden=!get('aoSearch').value;
+  group='all';cursors=[null];page=0;next=null;dirty=true;cancelList();loading=true;get('aoList').replaceChildren();get('aoListStatus').textContent='Recherche en cours…';get('aoPagination').hidden=true;controls();
+  if(immediate)loadList();else searchTimer=setTimeout(()=>{if(active()&&get('aoDetail').hidden)loadList();},300);
+ }
+ const notificationLabels={sent:'Envoyé',pending:'En attente',sending:'Envoi en cours',retrying:'Nouvel essai en attente',unreachable:'Client injoignable'};
+ function notificationBadge(item){
+  const state=Object.prototype.hasOwnProperty.call(notificationLabels,item?.status)?item.status:'pending';
+  return el('span','ao-message-badge ao-message-'+state,notificationLabels[state]);
+ }
  function row(o){
   const li=el('li'),b=button('',()=>openDetail(o.reference),'ao-order-row');b.dataset.reference=o.reference;b.disabled=busy;
   const top=el('span','ao-row-top');top.append(el('strong','',person(o)),el('b','',money(o.total_cents)));
@@ -42,21 +57,25 @@
   b.setAttribute('aria-label','Ouvrir la commande de '+person(o)+', '+status(o)+', '+money(o.total_cents)+', '+o.reference);
   b.append(top,middle,bottom);if(helpPending(o))b.append(el('small','ao-help-request','Autre paiement demandé'));
   if(paid(o)&&paymentRecord(o).method!=='unknown')b.append(el('small','ao-payment-method-label','Paiement : '+paymentRecord(o).label));
+  const notifications=o.customer_notifications;
+  if(notifications?.latest){const message=el('span','ao-row-message');message.append(el('span','','Telegram · '+notifications.latest.label),notificationBadge(notifications.latest));b.append(message);}
+  if(notifications?.attention_count>0)b.append(el('small','ao-message-attention',notifications.attention_count+' message'+(notifications.attention_count>1?'s':'')+' à vérifier'));
+  if(o.private_note?.text)b.append(el('small','ao-row-meta','Note privée enregistrée'));
   li.append(b);return li;
  }
  function restoreList(){scrollTo({top:scroll,behavior:'instant'});if(returnRef){[...get('aoList').querySelectorAll('[data-reference]')].find(b=>b.dataset.reference===returnRef)?.focus({preventScroll:true});}}
  async function loadList({restore=false}={}){
   cancelList();const seq=listSeq;listController=new AbortController();loading=true;next=null;
   get('aoList').replaceChildren();get('aoList').setAttribute('aria-busy','true');note('aoListError','');get('aoRetry').hidden=true;
-  get('aoGroupTitle').textContent=groups[group][0];get('aoGroupHint').textContent=groups[group][1];get('aoListStatus').textContent='Chargement des commandes…';
+  get('aoGroupTitle').textContent=(search?'Recherche · ':'')+groups[group][0];get('aoGroupHint').textContent=search?'Résultats pour « '+search+' »'+(group==='all'?' dans toutes les commandes.':' dans cette étape.'):groups[group][1];get('aoListStatus').textContent='Chargement des commandes…';
   root.querySelectorAll('[data-order-group]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.orderGroup===group)));controls();
   try{
-   const params=new URLSearchParams({group,limit:'10'});if(cursors[page])params.set('before',cursors[page]);
+   const params=new URLSearchParams({group,limit:'10'});if(search)params.set('q',search);if(cursors[page])params.set('before',cursors[page]);
    const data=await request('/api/shop/admin/orders?'+params,{signal:listController.signal});if(seq!==listSeq||!active())return;
    if(!data.orders.length&&page>0){page--;cursors.length=page+1;return loadList({restore});}
    loaded=true;dirty=false;next=data.next_before;get('aoList').replaceChildren(...data.orders.map(row));
-   get('aoListStatus').textContent=data.orders.length?(data.orders.length+' commande'+(data.orders.length===1?'':'s')+' sur cette page'):groups[group][2];
-   if(!data.orders.length)get('aoList').append(el('li','ao-empty',group==='preparing'?'Les commandes payées et les cadeaux confirmés apparaissent ici.':groups[group][1]));
+   get('aoListStatus').textContent=data.orders.length?(data.orders.length+' commande'+(data.orders.length===1?'':'s')+' sur cette page'):search?'Aucune commande trouvée.':groups[group][2];
+   if(!data.orders.length)get('aoList').append(el('li','ao-empty',search?(group==='all'?'Essayez un autre nom, pseudo ou numéro de commande.':'Essayez le filtre « Toutes » pour élargir la recherche.'):(group==='preparing'?'Les commandes payées et les cadeaux confirmés apparaissent ici.':groups[group][1])));
    get('aoPagination').hidden=!data.orders.length;if(restore)restoreList();
   }catch(e){if(e.name==='AbortError'||seq!==listSeq||!active())return;dirty=true;get('aoListStatus').textContent='Liste indisponible';note('aoListError',e.message);get('aoRetry').hidden=false;}
   finally{if(seq===listSeq){loading=false;get('aoList').setAttribute('aria-busy','false');controls();}}
@@ -147,11 +166,66 @@
    if(!Number.isSafeInteger(total)||total!==o.total_cents){note('aoDetailError','Le montant reçu doit correspondre au total de la commande : '+money(o.total_cents)+'.');get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});return;}
    mutate('confirm-payment',{confirmed_total_cents:total,payment_method:method.input.value,note:reference.input.value.trim()},'Paiement validé. Le bordereau est à faire.','preparing');};host.append(form);
  }
+ function notificationCard(o){
+  const card=el('section','ao-card ao-notifications');card.id='aoNotifications';card.append(el('h2','','Messages au client'));
+  const notifications=o.customer_notifications;
+  if(!notifications?.latest){card.append(el('p','ao-muted','Aucun envoi Telegram enregistré pour cette commande.'));return card;}
+  const latest=notifications.latest,line=el('div','ao-notification-line');line.append(el('strong','',latest.label),notificationBadge(latest));card.append(line);
+  if(notifications.attention_count>0)card.append(el('p','ao-message-attention','Un ou plusieurs messages demandent votre attention. Consultez le détail ci-dessous.'));
+  const history=el('details','ao-notification-history');history.append(el('summary','','Détail des messages'));
+  const list=el('ul');
+  for(const item of notifications.items||[]){const row=el('li','ao-notification-line');row.append(el('span','',item.label),notificationBadge(item));list.append(row);}
+  history.append(list);card.append(history);
+  card.append(el('p','ao-muted','« Envoyé » signifie que Telegram a accepté le message. La lecture par le client n’est pas connue.'));
+  if((notifications.items||[]).some(item=>item.status==='unreachable'))card.append(el('p','ao-notification-help','Client injoignable : demandez-lui de démarrer ou de débloquer le bot et d’autoriser ses messages. L’envoi concerné n’a pas abouti.'));
+  if((notifications.items||[]).some(item=>item.status==='retrying'))card.append(el('p','ao-notification-help','Un nouvel essai automatique est prévu. Actualisez la commande pour vérifier le résultat.'));
+  return card;
+ }
+ function privateNoteCard(o){
+  const saved=o.private_note||{text:'',revision:0,updated_at:null};
+  let draft=noteDrafts.get(o.reference);
+  // A refreshed response can confirm a save whose network response was lost.
+  if(draft&&normalizedNote(draft.text)===saved.text){noteDrafts.delete(o.reference);draft=null;}
+  const card=el('section','ao-card ao-private-note');card.id='aoPrivateNoteCard';card.append(el('h2','','Note privée'),el('p','ao-muted','Visible uniquement dans l’administration. Rien n’est envoyé au client.'));
+  const form=el('form'),fieldset=el('fieldset');fieldset.dataset.aoMutate='';
+  const label=el('label','','Votre mémo pour cette commande'),input=el('textarea');input.id='aoPrivateNote';input.maxLength=2000;input.rows=4;input.placeholder='Ex. Client recontacté, colis à déposer vendredi…';input.value=draft?.text??saved.text;label.append(input);
+  const counter=el('small','ao-note-counter');counter.id='aoNoteCounter';
+  const statusLine=el('p','ao-note-status');statusLine.id='aoNoteStatus';statusLine.setAttribute('role','status');
+  const save=formButton('Enregistrer la note');save.id='aoSaveNote';
+  const conflict=el('div','ao-note-conflict');conflict.hidden=!draft||draft.revision===saved.revision;
+  if(!conflict.hidden){
+   conflict.append(el('p','','Cette note a changé depuis votre dernière ouverture. Votre brouillon est conservé. Voici la note actuellement enregistrée :'),el('p','ao-saved-note',saved.text||'(Note vide)'));
+   const use=button('Utiliser la note enregistrée',()=>{noteDrafts.delete(o.reference);input.value=saved.text;conflict.hidden=true;changed();},'ao-secondary');use.id='aoNoteUseSaved';
+   const keep=button('Garder mon texte',()=>{noteDrafts.set(o.reference,{text:input.value,revision:saved.revision});conflict.hidden=true;changed();},'ao-secondary');keep.id='aoNoteKeepDraft';conflict.append(use,keep);
+  }
+  function changed(){
+   counter.textContent=input.value.length+' / 2 000 caractères';
+   const existing=noteDrafts.get(o.reference);
+   if(input.value===saved.text)noteDrafts.delete(o.reference);else noteDrafts.set(o.reference,{text:input.value,revision:existing?.revision??saved.revision});
+   save.disabled=!conflict.hidden||input.value===saved.text;
+   statusLine.textContent=!conflict.hidden?'Choisissez le texte à conserver avant d’enregistrer.':input.value!==saved.text?'Modifications non enregistrées.':saved.updated_at?'Enregistrée le '+date(saved.updated_at):'Aucune note enregistrée.';
+  }
+  input.addEventListener('input',changed);fieldset.append(label,counter,conflict,save);form.append(fieldset,statusLine);card.append(form);changed();
+  form.onsubmit=async e=>{
+   e.preventDefault();if(busy||!verified||!conflict.hidden||!form.reportValidity()||!selected||selected.reference!==o.reference)return;
+   const currentDraft=noteDrafts.get(o.reference);if(!currentDraft)return;
+   busy=true;controls();statusLine.textContent='Enregistrement de la note…';note('aoDetailError','');
+   try{
+    const data=await request('/api/shop/admin/orders/'+encodeURIComponent(o.reference)+'/private-note',{method:'POST',body:JSON.stringify({text:input.value,expected_revision:currentDraft.revision})});
+    noteDrafts.delete(o.reference);dirty=true;
+    if(active()&&selectedRef===o.reference){selected=data.order;verified=true;card.replaceWith(privateNoteCard(selected));get('aoNoteStatus').textContent=selected.private_note.text?'Note enregistrée.':'Note effacée.';}
+   }catch(error){
+    if(active()&&selectedRef===o.reference){verified=error.status===400;statusLine.textContent=(error.status?error.message:'La réponse n’a pas été reçue.')+(verified?'':' Votre texte est conservé. Actualisez la commande avant de réessayer.');statusLine.classList.add('ao-message-attention');}
+   }finally{busy=false;controls();}
+  };
+  return card;
+ }
  function renderDetail(){
   const o=selected,host=get('aoDetailBody');host.replaceChildren();
   const header=el('div','ao-detail-heading');header.append(el('span','ao-badge ao-status-'+o.status,status(o)));
   if(o.is_gift)header.append(el('span','gift-order-badge','Cadeau · produit et livraison offerts'));
   const title=el('h1','',person(o));title.tabIndex=-1;header.append(title,el('p','ao-muted',o.reference+' · '+date(o.created_at)));host.append(header);
+  host.append(notificationCard(o));
   const contact=el('section','ao-card');contact.append(el('h2','','Coordonnées de livraison'));
   const c=o.contact,address=[c.address,c.address_extra,[c.postal_code,c.city].filter(Boolean).join(' '),countries[c.country]||c.country].filter(Boolean).join('\n');
   contact.append(button('Copier toutes les coordonnées',()=>copy(person(o)+'\n'+address+'\n'+c.email+'\n'+c.phone),'ao-secondary ao-copy-all'));
@@ -185,20 +259,47 @@
    form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const state=['paid','gifted'].includes(o.status)?'shipped':o.status==='available'?'delivered':select.value;mutate('shipping',{tracking_number:tracking.input.value.trim(),status:state},state==='delivered'?'Commande marquée comme livrée.':'Livraison mise à jour.',state==='delivered'?'history':'shipping');};actions.append(form);
    if(['paid','gifted'].includes(o.status))actions.append(action('Remettre dans les bordereaux à faire',()=>mutate('preparation',{prepared:false},'La commande est de nouveau dans les bordereaux à faire.','preparing')));
   }else{actions.append(el('h2','',o.status_label));if(o.tracking_number)contactField(actions,'Numéro de suivi',o.tracking_number);}
-  controls();
+  host.append(privateNoteCard(o));controls();
  }
  async function mutate(endpoint,payload,message,destination){
   if(busy||!verified||!selected)return;const reference=selected.reference;busy=true;controls();note('aoDetailError','');note('aoDetailStatus','Enregistrement en cours…');
   try{
    const data=await request('/api/shop/admin/orders/'+encodeURIComponent(reference)+'/'+endpoint,{method:'POST',body:JSON.stringify(payload)});dirty=true;
-   if(active()&&selectedRef===reference){selected=data.order;verified=true;group=stage(selected);cursors=[null];page=0;next=null;renderDetail();note('aoDetailStatus',data.duplicate||group!==destination?'Commande actualisée : '+status(selected)+'.':message);get('aoDetailStatus').scrollIntoView({block:'start',behavior:'instant'});}
+   if(active()&&selectedRef===reference){selected=data.order;verified=true;if(!search&&group!=='all')group=stage(selected);cursors=[null];page=0;next=null;renderDetail();note('aoDetailStatus',data.duplicate?'Commande actualisée : '+status(selected)+'.':message);get('aoDetailStatus').scrollIntoView({block:'start',behavior:'instant'});}
   }catch(e){dirty=true;if(active()&&selectedRef===reference){verified=e.status===400;note('aoDetailStatus','');note('aoDetailError',(e.status?e.message:'La réponse n’a pas été reçue.')+(verified?'':' Actualisez la commande pour vérifier son état avant une nouvelle action.'));get('aoDetailError').scrollIntoView({block:'start',behavior:'instant'});}}
   finally{busy=false;controls();if(active()&&get('aoDetail').hidden)loadList({restore:true});}
  }
- get('aoRefresh').onclick=get('aoRetry').onclick=()=>loadList();get('aoRefreshDetail').onclick=()=>{if(!busy&&selectedRef)openDetail(selectedRef,{refresh:true});};
+ function cancelSummary(){summarySeq++;summaryController?.abort();}
+ async function loadSummary(){
+  if(!me.is_admin)return;cancelSummary();const seq=summarySeq;summaryController=new AbortController();const controller=summaryController;
+  const host=get('adSummary');host.setAttribute('aria-busy','true');get('adSummaryCounts').hidden=true;get('adSummaryError').hidden=true;get('adSummaryRefresh').disabled=true;get('adSummaryStatus').textContent='Chargement du résumé…';
+  let timedOut=false;const timer=setTimeout(()=>{timedOut=true;controller.abort();},15000);
+  try{
+   const data=await request('/api/shop/admin/orders/summary',{signal:controller.signal});if(seq!==summarySeq||!get('admin').classList.contains('active'))return;
+   const counts=data.counts;if(!counts||!['payments','preparing','ready','shipping'].every(key=>Number.isSafeInteger(counts[key])&&counts[key]>=0))throw Error('Le résumé n’a pas pu être vérifié. Actualisez pour réessayer.');
+   host.querySelectorAll('[data-admin-count]').forEach(n=>{n.textContent=new Intl.NumberFormat('fr-FR').format(counts[n.dataset.adminCount]);});
+   get('adSummaryCounts').hidden=false;get('adSummaryStatus').textContent='Actualisé à '+new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'}).format(new Date());
+  }catch(error){
+   if(seq!==summarySeq||!get('admin').classList.contains('active')||(error.name==='AbortError'&&!timedOut))return;
+   get('adSummaryStatus').textContent='Résumé indisponible';get('adSummaryError').textContent=timedOut?'Le chargement prend trop de temps. Appuyez sur Actualiser.':error.message;get('adSummaryError').hidden=false;
+  }finally{clearTimeout(timer);if(seq===summarySeq){host.setAttribute('aria-busy','false');get('adSummaryRefresh').disabled=false;}}
+ }
+ get('adSummaryRefresh').onclick=()=>loadSummary();
+ get('adSummary').querySelectorAll('[data-admin-order-group]').forEach(b=>b.onclick=()=>{
+  if(busy)return;group=b.dataset.adminOrderGroup;search='';get('aoSearch').value='';get('aoSearchClear').hidden=true;cursors=[null];page=0;next=null;dirty=true;go('adminOrders');
+ });
+ get('aoSearch').addEventListener('input',()=>changeSearch());
+ get('aoSearchForm').onsubmit=e=>{e.preventDefault();changeSearch(true);};
+ get('aoSearchClear').onclick=()=>{get('aoSearch').value='';changeSearch(true);get('aoSearch').focus();};
+ get('aoRefresh').onclick=get('aoRetry').onclick=()=>{clearTimeout(searchTimer);loadList();};get('aoRefreshDetail').onclick=()=>{if(!busy&&selectedRef)openDetail(selectedRef,{refresh:true});};
  get('aoPrevious').onclick=()=>{if(!loading&&!busy&&page>0){page--;loadList();scrollTo({top:0,behavior:'instant'});}};
  get('aoNext').onclick=()=>{if(!loading&&!busy&&next){cursors=cursors.slice(0,page+1);cursors.push(next);page++;loadList();scrollTo({top:0,behavior:'instant'});}};
  root.querySelectorAll('[data-order-group]').forEach(b=>b.onclick=()=>setGroup(b.dataset.orderGroup));
- const previousGo=go;go=function(id){if(id==='adminOrders'&&!me.is_admin){toast('Accès réservé à l’administration');return;}if(active()&&id!=='adminOrders'){cancelList();cancelDetail();dirty=true;}previousGo(id);if(id==='adminOrders')showList();};
+ const previousGo=go;go=function(id){
+  if((id==='adminOrders'||id==='admin')&&!me.is_admin){noteDrafts.clear();get('aoList').replaceChildren();get('aoDetailBody').replaceChildren();get('adSummaryCounts').hidden=true;toast('Accès réservé à l’administration');return;}
+  if(active()&&id!=='adminOrders'){clearTimeout(searchTimer);cancelList();cancelDetail();dirty=true;}
+  if(get('admin').classList.contains('active')&&id!=='admin'){cancelSummary();get('adSummaryCounts').hidden=true;}
+  previousGo(id);if(id==='adminOrders')showList();if(id==='admin')loadSummary();
+ };
  const previousBack=goBack;goBack=function(){if(active()&&!get('aoDetail').hidden){showList({restore:true});return;}previousBack();};root.querySelector('.page-back').onclick=()=>goBack();
 })();

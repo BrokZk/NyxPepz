@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import time
+import unicodedata
 import uuid
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -16,7 +17,7 @@ import click
 import requests
 from flask import jsonify, request
 from shop_packs import inventory_lines
-from sqlalchemy import update, or_
+from sqlalchemy import update, or_, and_, case, cast, String, func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 SHIPPING = {"FR": 500, "BE": 500, "ES": 1000}
@@ -90,6 +91,15 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         source = db.Column(db.String(32), nullable=False)
         recorded_at = db.Column(db.BigInteger)
         recorded_by_telegram_id = db.Column(db.BigInteger)
+
+    class ShopPrivateNote(db.Model):
+        # Administrative notes are separate from customer, payment and delivery
+        # data. Every edit, including clearing the note, keeps its own revision.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        revision = db.Column(db.Integer, primary_key=True)
+        text = db.Column(db.Text, nullable=False)
+        updated_at = db.Column(db.BigInteger, nullable=False)
+        updated_by_telegram_id = db.Column(db.BigInteger, nullable=False)
 
     class ShopProfile(db.Model):
         user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
@@ -211,6 +221,42 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "referral_rule": "first_paid_order",
                 "payment_notice": "Le paiement s’ouvre chez PayGate. Les éventuels frais du prestataire y sont affichés."}
 
+    def private_note(order):
+        latest = ShopPrivateNote.query.filter_by(order_id=order.id).order_by(
+            ShopPrivateNote.revision.desc()).first()
+        return {"text": latest.text if latest else "", "revision": latest.revision if latest else 0,
+                "updated_at": latest.updated_at if latest else None}
+
+    def customer_notifications(order, owner):
+        labels = {"created": "Commande reçue", "paid": "Paiement validé", "gifted": "Cadeau confirmé",
+                  "shipped": "Colis expédié", "available": "Colis disponible", "delivered": "Colis livré"}
+        status_labels = {"sent": "Message envoyé", "pending": "En attente d’envoi",
+                         "sending": "Envoi en cours", "retrying": "Nouvelle tentative prévue",
+                         "unreachable": "Client injoignable"}
+        if not owner:
+            return {"latest": None, "items": [], "attention_count": 0}
+        now = int(time.time())
+        query = ShopOutbox.query.filter(ShopOutbox.order_id == order.id,
+            ShopOutbox.recipient == str(owner.telegram_id),
+            ShopOutbox.kind.startswith("client_", autoescape=True))
+        def status(job):
+            if job.state == "done":
+                return "unreachable" if job.last_error == "client_unreachable" else "sent"
+            if job.state == "working" and job.lease_until > now:
+                return "sending"
+            return "retrying" if job.attempts > 0 else "pending"
+        items = []
+        for job in query.order_by(ShopOutbox.id.desc()).limit(10):
+            event, state = job.kind[len("client_"):], status(job)
+            items.append({"event": event, "label": labels.get(event, "Message au client"),
+                          "status": state, "status_label": status_labels[state]})
+        # Count all jobs needing attention, even when they are older than the
+        # ten displayed entries. A Telegram 403 is terminal, never a success.
+        attention = query.filter(or_(and_(ShopOutbox.state == "done", ShopOutbox.last_error == "client_unreachable"),
+            and_(ShopOutbox.state != "done", ShopOutbox.attempts > 0,
+                 or_(ShopOutbox.state != "working", ShopOutbox.lease_until <= now)))).count()
+        return {"latest": items[0] if items else None, "items": items, "attention_count": attention}
+
     def serialize(order, admin=False):
         requested_help = payment_help_requested(order)
         gifts = app.extensions.get('nyx_gifts')
@@ -233,6 +279,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             preparation = db.session.get(ShopPreparation, order.id)
             data.update(contact=order.contact, telegram_id=owner.telegram_id if owner else None,
                         username=owner.username if owner else None, payment_note=order.payment_note,
+                        private_note=private_note(order), customer_notifications=customer_notifications(order, owner),
                         payment_record=payment_record(order),
                         payment_history=[serialize_payment_record(record) for record in
                             ShopPaymentRecord.query.filter_by(order_id=order.id).order_by(
@@ -666,16 +713,62 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             count = ReferralOrderEvent.query.filter_by(referrer_user_id=order.referrer_id).count()
             db.session.execute(update(User).where(User.id == order.referrer_id).values(referral_points=count))
 
-    @app.get("/api/shop/admin/orders")
-    def admin_orders():
-        if not require_admin():
-            return fail("Interdit", 403)
+    def order_group_filter(group):
         groups = {'action': ('awaiting_payment', 'payment_review', 'paid', 'gifted'),
                   'preparing': ('paid', 'gifted'), 'ready': ('paid', 'gifted'),
                   'payments': ('awaiting_payment', 'payment_review'),
                   'expired': ('expired',),
                   'shipping': ('shipped', 'available'), 'history': ('paid', 'gifted', 'shipped', 'available', 'delivered')}
+        if group not in groups:
+            raise ValueError('Filtre invalide')
+        condition = ShopOrder.status.in_(groups[group])
+        if group in ('preparing', 'ready'):
+            prepared = db.session.query(ShopPreparation.order_id).filter(
+                ShopPreparation.order_id == ShopOrder.id).exists()
+            condition = and_(condition, prepared if group == 'ready' else ~prepared)
+        return condition
+
+    def search_orders(query, search):
+        # Search a separator-delimited string so each whitespace-delimited token
+        # can match any requested field. SQL escaping treats %, _ and / literally.
+        fields = [ShopOrder.reference] + [ShopOrder.contact[key].as_string() for key in
+            ('first_name', 'last_name', 'email', 'phone')] + [User.username, cast(User.telegram_id, String)]
+        searchable = func.coalesce(fields[0], '')
+        for field in fields[1:]:
+            searchable = searchable + '\n' + func.coalesce(field, '')
+        # Portable accent folding: no database extension or schema migration.
+        accents = 'àâäáãåçéèêëìíîïñòóôöõùúûüýÿœæ'
+        replacements = ('a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e',
+            'i', 'i', 'i', 'i', 'n', 'o', 'o', 'o', 'o', 'o', 'u', 'u', 'u', 'u', 'y', 'y', 'oe', 'ae')
+        for accented, plain in zip(accents, replacements):
+            for value in (accented, accented.upper()):
+                searchable = func.replace(searchable, value, plain)
+                search = search.replace(value, plain)
+        searchable = func.lower(searchable)
+        query = query.outerjoin(User, User.id == ShopOrder.user_id)
+        for token in dict.fromkeys(search.lower().split()):
+            if token.startswith('@') and len(token) > 1:
+                token = token[1:]
+            query = query.filter(searchable.contains(token, autoescape=True))
+        return query
+
+    @app.get("/api/shop/admin/orders/summary")
+    def admin_orders_summary():
+        if not require_admin():
+            return fail("Interdit", 403)
+        groups = ('payments', 'preparing', 'ready', 'shipping')
+        row = db.session.query(*[func.coalesce(func.sum(case((order_group_filter(group), 1), else_=0)), 0)
+                                 for group in groups]).select_from(ShopOrder).one()
+        return jsonify(counts={group: int(count) for group, count in zip(groups, row)})
+
+    @app.get("/api/shop/admin/orders")
+    def admin_orders():
+        if not require_admin():
+            return fail("Interdit", 403)
         group = request.args.get('group')
+        search = request.args.get('q', '')
+        if len(search) > 100 or any(unicodedata.category(char) in ('Cc', 'Cf', 'Cs') for char in search):
+            return fail('Recherche invalide : 100 caractères maximum, sans caractère de contrôle')
         try:
             limit = int(request.args.get('limit', '50'))
         except (TypeError, ValueError):
@@ -683,14 +776,13 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if not 1 <= limit <= 50:
             return fail('Taille de page invalide')
         query = ShopOrder.query
-        if group is not None:
-            if group not in groups:
-                return fail('Filtre invalide')
-            query = query.filter(ShopOrder.status.in_(groups[group]))
-            if group in ('preparing', 'ready'):
-                prepared = db.session.query(ShopPreparation.order_id).filter(
-                    ShopPreparation.order_id == ShopOrder.id).exists()
-                query = query.filter(prepared if group == 'ready' else ~prepared)
+        if group is not None and group != 'all':
+            try:
+                query = query.filter(order_group_filter(group))
+            except ValueError as exc:
+                return fail(str(exc))
+        if search.strip():
+            query = search_orders(query, search.strip())
         before = request.args.get('before', type=int)
         if before:
             query = query.filter(ShopOrder.id < before)
@@ -709,6 +801,48 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if not order:
             return fail("Commande introuvable", 404)
         return jsonify(order=serialize(order, True))
+
+    @app.post("/api/shop/admin/orders/<reference>/private-note")
+    def update_private_note(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail("Données invalides")
+        text, revision = payload.get('text'), payload.get('expected_revision')
+        if (not isinstance(text, str) or len(text) > 2000 or
+                any(unicodedata.category(char) in ('Cc', 'Cf', 'Cs') and char not in '\r\n' for char in text)):
+            return fail("Note invalide : 2 000 caractères maximum")
+        if type(revision) is not int or not 0 <= revision < 2 ** 31:
+            return fail("Version de la note invalide. Actualisez la commande.")
+        text = text.replace('\r\n', '\n').replace('\r', '\n').strip()
+        try:
+            # Lock the existing order without changing its values. Competing
+            # edits then check the most recent committed note before appending.
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            latest = ShopPrivateNote.query.filter_by(order_id=order.id).order_by(
+                ShopPrivateNote.revision.desc()).first()
+            current_revision = latest.revision if latest else 0
+            if current_revision != revision:
+                if (current_revision == revision + 1 and latest.text == text and
+                        latest.updated_by_telegram_id == admin.telegram_id):
+                    db.session.commit()
+                    return jsonify(order=serialize(order, True), duplicate=True)
+                return fail("La note a été modifiée entre-temps. Actualisez la commande avant de réessayer.", 409)
+            if text == (latest.text if latest else ''):
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            db.session.add(ShopPrivateNote(order_id=order.id, revision=current_revision + 1, text=text,
+                updated_at=int(time.time()), updated_by_telegram_id=admin.telegram_id))
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Enregistrement de la note indisponible ; réessayez", 503)
 
     @app.post("/api/shop/admin/orders/<reference>/confirm-payment")
     def confirm_payment(reference):
@@ -892,6 +1026,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
         "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation, "PaymentRecord": ShopPaymentRecord,
+        "PrivateNote": ShopPrivateNote,
         "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
     return app.extensions["nyx_shop"]
