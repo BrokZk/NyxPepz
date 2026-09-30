@@ -2,7 +2,7 @@ import os, hmac, hashlib, json, secrets, string
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
 import requests
-from sqlalchemy import inspect, text, update, case
+from sqlalchemy import inspect, text, update, case, cast, func, or_, String
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import click
 try:
@@ -136,6 +136,92 @@ def admin_users():
         }
         for u in users
     ])
+
+
+def admin_user_summary(u, admin):
+    return {
+        "id": u.id,
+        "telegram_id": u.telegram_id,
+        "first_name": u.first_name,
+        "username": u.username,
+        "name": u.first_name or u.username or "Membre",
+        "points": u.loyalty_points,
+        "is_self": u.id == admin.id,
+    }
+
+
+def admin_users_response(payload, status=200):
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response, status
+
+
+@app.get("/api/admin/users/search")
+def admin_search_users():
+    admin = require_admin()
+    if not admin:
+        return admin_users_response({"error": "Interdit"}, 403)
+
+    try:
+        page = int(request.args.get("page", "1"))
+    except (TypeError, ValueError):
+        return admin_users_response({"error": "Page invalide"}, 400)
+    if page < 1:
+        return admin_users_response({"error": "Page invalide"}, 400)
+    sort = request.args.get("sort", "recent")
+    if sort not in ("recent", "points", "name"):
+        return admin_users_response({"error": "Tri invalide"}, 400)
+
+    query = User.query
+    search = request.args.get("q", "").strip()
+    if search.startswith("@"):
+        search = search[1:]
+    if search:
+        # Treat user input literally: LIKE wildcards and its escape character
+        # must not broaden an administrative search.
+        pattern = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        query = query.filter(or_(
+            User.first_name.ilike(pattern, escape="\\"),
+            User.username.ilike(pattern, escape="\\"),
+            cast(User.telegram_id, String).like(pattern, escape="\\"),
+        ))
+
+    total_users = User.query.count()
+    total = query.count()
+    page_size = 10
+    pages = max(1, (total + page_size - 1) // page_size)
+    # Deleting the last user on a page should reveal the preceding page.
+    page = min(page, pages)
+    if sort == "points":
+        query = query.order_by(User.loyalty_points.desc(), User.id.desc())
+    elif sort == "name":
+        display_name = func.coalesce(func.nullif(User.first_name, ""),
+                                     func.nullif(User.username, ""), "Membre")
+        query = query.order_by(func.lower(display_name).asc(), User.id.asc())
+    else:
+        query = query.order_by(User.created_at.desc(), User.id.desc())
+    users = query.offset((page - 1) * page_size).limit(page_size).all()
+    return admin_users_response({
+        "users": [admin_user_summary(u, admin) for u in users],
+        "page": page,
+        "page_size": page_size,
+        "pages": pages,
+        "total": total,
+        "total_users": total_users,
+    })
+
+
+@app.get("/api/admin/users/<int:uid>")
+def admin_user_detail(uid):
+    admin = require_admin()
+    if not admin:
+        return admin_users_response({"error": "Interdit"}, 403)
+    user = db.session.get(User, uid)
+    if not user:
+        return admin_users_response({"error": "Utilisateur introuvable"}, 404)
+    return admin_users_response(admin_user_summary(user, admin))
+
+
 @app.patch("/api/admin/users/<int:uid>/points")
 def admin_update_user_points(uid):
     if not require_admin():
@@ -145,7 +231,9 @@ def admin_update_user_points(uid):
     if not u:
         return jsonify(error="Utilisateur introuvable"), 404
 
-    data = request.json or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="Valeur invalide"), 400
 
     try:
         delta = int(data.get("delta", 0))

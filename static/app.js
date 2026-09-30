@@ -128,7 +128,7 @@ async function loadPacks(){
 }
 
 async function loadNews(){try{let a=await api("/api/news");$("#newsList").innerHTML=a.slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" loading="lazy" alt="${escapeHTML(n.title)}" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
-async function loadLeaders(){try{let a=await api("/api/leaderboard");$("#leaders").innerHTML=a.map((x,i)=>`<div class="leader"><span>${i+1}. ${x.name}</span><b>${x.points} pts</b></div>`).join("")||"Aucun classement."}catch(e){toast(e.message)}}
+async function loadLeaders(){try{let a=await api("/api/leaderboard");$("#leaders").innerHTML=a.map((x,i)=>`<div class="leader"><span>${i+1}. ${escapeHTML(x.name)}</span><b>${x.points} pts</b></div>`).join("")||"Aucun classement."}catch(e){toast(e.message)}}
 async function loadHomeLeaders(){try{let a=(await api("/api/leaderboard")).slice(0,3);$("#homeLeaders").innerHTML=a.map((x,i)=>`<div class="podium-member"><span class="podium-medal" aria-label="Place ${i+1}">${["🥇","🥈","🥉"][i]}</span><b>${escapeHTML(x.name)}</b><span class="podium-points">${Number(x.points)||0} points</span></div>`).join("")||'<p class="empty-state">Le classement apparaîtra avec les premiers membres.</p>'}catch(e){$("#homeLeaders").innerHTML='<p class="empty-state">Classement momentanément indisponible.</p>'}}
 $("#copyCode").onclick=async()=>{try{await navigator.clipboard.writeText(me.referral_code);toast("Code copié")}catch{toast(me.referral_code||"Code indisponible")}};
 $("#applyReferral").onclick=async()=>{try{await api("/api/referral/apply",{method:"POST",body:JSON.stringify({code:$("#applyCode").value})});toast("Parrain enregistré")}catch(e){toast(e.message)}};
@@ -220,7 +220,7 @@ function renderAdminProducts(){
  });
 }
 $('#adminProductSearch')?.addEventListener('input',renderAdminProducts);
-async function loadAdmin(){if(!me.is_admin)return;try{await loadAdminUsers();
+async function loadAdmin(){if(!me.is_admin)return;try{
  let ps=await api("/api/admin/products");
  adminProductItems=ps;renderAdminProducts();
  let pk=await api("/api/admin/packs");
@@ -237,60 +237,6 @@ $("#aAdd").onclick=async()=>{try{let image=$("#aImage").value;if($("#aFile").fil
 $("#pAdd").onclick=async()=>{try{let image=$("#pImage").value;if($("#pFile").files[0])image=await uploadPhoto($("#pFile"));await api("/api/admin/packs",{method:"POST",body:JSON.stringify({title:$("#pTitle").value,subtitle:$("#pSubtitle").value,price:+$("#pPrice").value,image_url:image,sort_order:+$("#pOrder").value||0})});toast("Pack ajouté");loadAdmin();loadPacks()}catch(e){toast(e.message)}};
 $("#nAdd").onclick=async()=>{try{let image=$("#nImage").value;if($("#nFile").files[0])image=await uploadPhoto($("#nFile"));await api("/api/admin/news",{method:"POST",body:JSON.stringify({title:$("#nTitle").value,subtitle:$("#nSubtitle").value,image_url:image})});toast("Nouveauté publiée");loadAdmin();loadNews()}catch(e){toast(e.message)}};
 go("home");boot();
-
-async function loadAdminUsers(){
-  try{
-    const users = await api("/api/admin/users");
-    const box = $("#adminUsers");
-    if(!box) return;
-
-    box.innerHTML = users.map(u => `
-      <div class="admin-row card">
-        <div>
-          <b>${u.name}</b>
-          <small>ID Telegram : ${u.telegram_id} · ${u.points} point(s)</small>
-          <div class="admin-points">
-  <button onclick="changeAdminPoints(${u.id},-10)">−10</button>
-  <button onclick="changeAdminPoints(${u.id},-1)">−1</button>
-  <button onclick="changeAdminPoints(${u.id},1)">+1</button>
-  <button onclick="changeAdminPoints(${u.id},10)">+10</button>
-</div>
-        </div>
-        <button onclick="deleteAdminUser(${u.id})">🗑 Supprimer</button>
-      </div>
-    `).join("");
-  }catch(e){
-    console.error("Erreur utilisateurs admin :", e);
-  }
-}
-async function changeAdminPoints(id,delta){
-  try{
-    await api("/api/admin/users/" + id + "/points",{
-      method:"PATCH",
-      body:JSON.stringify({delta:delta})
-    });
-
-    await loadAdminUsers();
-    await loadLeaders();
-    await loadHomeLeaders();
-
-    toast("Points mis à jour");
-  }catch(e){
-    toast(e.message || "Modification impossible");
-  }
-}
-async function deleteAdminUser(id){
-  if(!confirm("Supprimer définitivement cet utilisateur ?")) return;
-  try{
-    await api("/api/admin/users/" + id, {method:"DELETE"});
-    toast("Utilisateur supprimé");
-    await loadAdminUsers();
-    await loadLeaders();
-    await loadHomeLeaders();
-  }catch(e){
-    toast(e.message || "Suppression impossible");
-  }
-}
 
 document.addEventListener("visibilitychange",restartPromo);
 
