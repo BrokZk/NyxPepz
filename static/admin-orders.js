@@ -57,6 +57,14 @@
   b.setAttribute('aria-label','Ouvrir la commande de '+person(o)+', '+status(o)+', '+money(o.total_cents)+', '+o.reference);
   b.append(top,middle,bottom);if(helpPending(o))b.append(el('small','ao-help-request','Autre paiement demandé'));
   if(paid(o)&&paymentRecord(o).method!=='unknown')b.append(el('small','ao-payment-method-label','Paiement : '+paymentRecord(o).label));
+  if(stage(o)==='ready'&&Array.isArray(o.lines)&&o.lines.length){
+   const contents=el('span','ao-row-contents');contents.id='ao-contents-'+o.reference;
+   for(const line of o.lines){
+    const products=Array.isArray(line.components)&&line.components.length?line.components:[line];
+    for(const product of products)contents.append(el('span','ao-row-content-item',product.quantity+' × '+product.name+(product.format?' '+product.format:'')));
+   }
+   b.append(contents);b.setAttribute('aria-describedby',contents.id);
+  }
   const notifications=o.customer_notifications;
   if(notifications?.latest){const message=el('span','ao-row-message');message.append(el('span','','Telegram · '+notifications.latest.label),notificationBadge(notifications.latest));b.append(message);}
   if(notifications?.attention_count>0)b.append(el('small','ao-message-attention',notifications.attention_count+' message'+(notifications.attention_count>1?'s':'')+' à vérifier'));
@@ -303,3 +311,4 @@
  };
  const previousBack=goBack;goBack=function(){if(active()&&!get('aoDetail').hidden){showList({restore:true});return;}previousBack();};root.querySelector('.page-back').onclick=()=>goBack();
 })();
+

@@ -21,17 +21,29 @@ precision mediump float;
 varying vec3 N;varying vec3 P;varying vec3 C;varying float S;uniform sampler2D environment;uniform float hasTexture;
 void main(){
  vec3 n=normalize(N),v=normalize(vec3(0.,0.,9.)-P);
- float facing=max(0.,dot(n,v)),rim=pow(1.-facing,2.8);
- vec3 light=normalize(vec3(-.8,.8,1.7));float diffuse=max(0.,dot(n,light));
- float highlight=pow(max(0.,dot(reflect(-light,n),v)),52.);
- float strip=pow(max(0.,dot(reflect(-normalize(vec3(.8,.3,2.)),n),v)),20.);
- vec3 color=C*(.65+.6*diffuse)+vec3(.035,.57,1.)*rim*1.7;
- color+=vec3(.57,.86,1.)*highlight*.95+vec3(.67,.24,.76)*strip*.34;
+ // Fine surface variation, with restrained physically shaped reflections.
+ float grain=sin(P.x*185.+sin(P.y*73.))*sin(P.y*137.+P.z*91.);
+ n=normalize(n+vec3(grain,grain*.4,-grain*.3)*.0015);
+ float facing=max(0.,dot(n,v));float fresnel=.04+.96*pow(1.-facing,5.);
+ vec3 key=normalize(vec3(-1.2,1.7,2.4)),fill=normalize(vec3(1.4,-.4,1.));
+ float diffuse=max(0.,dot(n,key));
+ float spec=pow(max(0.,dot(n,normalize(key+v))),180.);
+ float soft=pow(max(0.,dot(n,normalize(key+v))),32.);
+ float second=pow(max(0.,dot(n,normalize(fill+v))),95.);
  vec2 uv=vec2(.72+n.x*.23,.35-n.y*.22+P.y*.025);
- color+=texture2D(environment,clamp(uv,vec2(.01),vec2(.99))).rgb*hasTexture*.035;
- float fade=1.-smoothstep(2.7,3.3,abs(P.y));float depth=clamp(.88+P.z*.25,.58,1.);
- float alpha=(S>.5?.9:.86)+rim*.1;
- gl_FragColor=vec4(color*depth,alpha*fade);
+ vec3 reflected=texture2D(environment,clamp(uv,vec2(.01),vec2(.99))).rgb*hasTexture;
+ float thickness=sqrt(max(0.,1.-pow(1.-facing,2.)));
+ vec3 absorption=mix(C*.38,C*.88,thickness);
+ vec3 color=absorption*(.4+.85*diffuse);
+ color+=reflected*(.13+.37*fresnel);
+ color+=vec3(.82,.94,1.)*(spec*1.05+soft*.24);
+ color+=vec3(.62,.72,.95)*second*.38;
+ color+=mix(C,vec3(.35,.68,.9),.55)*fresnel*.48;
+ float shadow=clamp(.74+P.z*.23,.36,1.);
+ float fade=1.-smoothstep(2.7,3.3,abs(P.y));
+ float alpha=mix(.79,.98,fresnel)+S*.01;
+ gl_FragColor=vec4(color*shadow,alpha*fade);
+
 }`;
  function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('Decorative shader unavailable');return s;}
  let program;try{program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,vertex));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Decorative program unavailable');}catch(e){canvas.remove();atmosphere.remove();return;}
@@ -46,7 +58,7 @@ void main(){
  function helixPoint(t,strand){const a=t*TAU*3.05+strand*Math.PI;const taper=.76+.24*Math.sin(Math.PI*t);return [Math.cos(a)*.61*taper,(t-.5)*6.5,Math.sin(a)*.61*taper];}
  // Continuous backbone prevents the disconnected pearl-necklace appearance.
  for(let strand=0;strand<2;strand++){
-  tube(Array.from({length:280},(_,i)=>helixPoint(i/279,strand)),.049,strand?violet:blue,16);
+  tube(Array.from({length:400},(_,i)=>helixPoint(i/399,strand)),.049,strand?violet:blue,24);
 
  }
  for(let i=0;i<35;i++){
@@ -60,18 +72,26 @@ void main(){
  const uniforms={angle:gl.getUniformLocation(program,'angle'),aspect:gl.getUniformLocation(program,'aspect'),hasTexture:gl.getUniformLocation(program,'hasTexture'),hasGlass:gl.getUniformLocation(program,'hasGlass')};
  const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([12,40,70,255]));gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  gl.uniform1i(gl.getUniformLocation(program,'environment'),0);
- let materialLoaded=true;canvas.style.opacity='1';canvas.style.filter='drop-shadow(0 0 4px #4385ff99) drop-shadow(0 0 10px #4659ff55)';
+ let materialLoaded=true;canvas.style.opacity='1';canvas.style.filter='drop-shadow(0 0 2px #4385ff22)';
  const photo=new Image();photo.onload=()=>{gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,photo);gl.uniform1f(uniforms.hasTexture,1);};photo.src='/static/neo-dna.webp';
  gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
  let w=0,h=0,time=0,last=0,frame=0,lost=false;
- function resize(){w=Math.min(innerWidth,1000);h=innerHeight;const dpr=Math.min(devicePixelRatio||1,1.5);canvas.width=atmosphere.width=Math.round(w*dpr);canvas.height=atmosphere.height=Math.round(h*dpr);gl.viewport(0,0,canvas.width,canvas.height);gl.uniform1f(uniforms.aspect,w/h);if(ctx)ctx.setTransform(dpr,0,0,dpr,0,0);}
+ function resize(){w=Math.min(innerWidth,1000);h=innerHeight;const dpr=Math.min(devicePixelRatio||1,2);canvas.width=atmosphere.width=Math.round(w*dpr);canvas.height=atmosphere.height=Math.round(h*dpr);gl.viewport(0,0,canvas.width,canvas.height);gl.uniform1f(uniforms.aspect,w/h);if(ctx)ctx.setTransform(dpr,0,0,dpr,0,0);}
  const particles=Array.from({length:82},(_,i)=>({x:(i*.618034)%1,y:(i*.414214)%1,z:i%7/7,phase:i*1.7}));
  const moleculePoints=[[0,0,0],[18,4,10],[-15,15,-7],[-5,-18,9],[33,-9,-5],[-28,7,12],[3,28,-10]];
  function atomSprite(purple){
-  const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
-  const grad=g.createRadialGradient(24,20,1,32,32,27);
-  grad.addColorStop(0,'rgba(204,234,255,.95)');grad.addColorStop(.23,purple?'rgba(139,68,230,.8)':'rgba(41,120,236,.8)');grad.addColorStop(.7,purple?'rgba(54,15,105,.45)':'rgba(8,35,86,.4)');grad.addColorStop(.88,'rgba(62,180,255,.8)');grad.addColorStop(1,'rgba(32,130,255,0)');
-  g.fillStyle=grad;g.beginPath();g.arc(32,32,27,0,TAU);g.fill();g.strokeStyle='rgba(129,222,255,.8)';g.lineWidth=1.1;g.beginPath();g.arc(32,32,24,3.5,5.3);g.stroke();return c;
+  const c=document.createElement('canvas');c.width=c.height=96;const g=c.getContext('2d');
+  const image=g.createImageData(96,96),base=purple?[.43,.19,.7]:[.07,.34,.67];
+  for(let y=0;y<96;y++)for(let x=0;x<96;x++){
+   const nx=(x-48)/43,ny=(y-48)/43,r2=nx*nx+ny*ny;if(r2>=1)continue;
+   const nz=Math.sqrt(1-r2),diff=Math.max(0,-nx*.4-ny*.5+nz*.76),f=.04+.96*Math.pow(1-nz,5);
+   const spec=Math.pow(Math.max(0,-nx*.22-ny*.28+nz*.934),100);
+   const fill=Math.pow(Math.max(0,nx*.45+ny*.12+nz*.885),45)*.22;
+   const i=(y*96+x)*4;
+   for(let k=0;k<3;k++)image.data[i+k]=Math.min(255,255*(base[k]*(.18+.7*diff)+[.74,.87,1][k]*(spec+fill)+[.2,.48,.65][k]*f*.5));
+   image.data[i+3]=255*Math.min(1,(1-r2)*35)*(.9+.1*f);
+  }
+  g.putImageData(image,0,0);return c;
  }
  const atomSprites=[atomSprite(false),atomSprite(true)];
  function ambient(){if(!ctx)return;ctx.clearRect(0,0,w,h);
@@ -85,9 +105,9 @@ void main(){
    const size=.6+(k%3)*.2,cx=w*(.12+(k%3)*.32)+Math.sin(time*.09+k)*12,cy=((k*.173+time*.005)%1)*(h+120)-60;
    const points=moleculePoints.map(([x,y,z])=>{const rx=x*ca+z*sa,rz=z*ca-x*sa,ry=y*cb-rz*sb,depth=y*sb+rz*cb,scale=180/(180-depth);return{x:cx+rx*scale*size,y:cy+ry*scale*size,z:depth,r:(3.3+k%2)*scale*size};});
    for(const [i,j] of [[0,1],[0,2],[0,3],[1,4],[2,5],[2,6]]){
-    const p=points[i],q=points[j],g=ctx.createLinearGradient(p.x,p.y,q.x,q.y);g.addColorStop(0,'rgba(45,127,238,.3)');g.addColorStop(.5,'rgba(123,169,255,.5)');g.addColorStop(1,'rgba(153,64,224,.32)');ctx.strokeStyle=g;ctx.lineWidth=1.25*size;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+    const p=points[i],q=points[j],g=ctx.createLinearGradient(p.x,p.y,q.x,q.y);g.addColorStop(0,'rgba(19,56,102,.55)');g.addColorStop(.4,'rgba(121,163,203,.7)');g.addColorStop(.65,'rgba(56,94,145,.65)');g.addColorStop(1,'rgba(71,40,114,.55)');ctx.strokeStyle=g;ctx.lineWidth=2.1*size;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
    }
-   points.sort((p,q)=>p.z-q.z).forEach((p,i)=>{ctx.globalAlpha=.5+(p.z+40)/210;ctx.drawImage(atomSprites[(i+k)%3===0?1:0],p.x-p.r*1.2,p.y-p.r*1.2,p.r*2.4,p.r*2.4);ctx.globalAlpha=1;});
+   points.sort((p,q)=>p.z-q.z).forEach((p,i)=>{ctx.globalAlpha=.65+(p.z+40)/260;ctx.drawImage(atomSprites[(i+k)%3===0?1:0],p.x-p.r*1.2,p.y-p.r*1.2,p.r*2.4,p.r*2.4);ctx.globalAlpha=1;});
   }
  }
  function draw(now){frame=0;if(document.hidden||lost)return;if(now-last<33){frame=requestAnimationFrame(draw);return;}time+=last?Math.min((now-last)/1000,.1):0;last=now;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.uniform1f(uniforms.angle,time*TAU/32+.7);gl.drawArrays(gl.TRIANGLES,0,count);ambient();if(materialLoaded)bg.classList.add('nyx-realistic-ready');frame=requestAnimationFrame(draw);}

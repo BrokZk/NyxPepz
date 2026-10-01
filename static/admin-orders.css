@@ -19,3 +19,7 @@
 @media(max-width:350px){#adSummary{padding:14px}.ad-summary-grid{gap:7px}#adSummary .ad-summary-grid>button{padding:12px 10px}.ao-search-field{padding:0 8px}.ao-notification-line{gap:7px}.ao-message-badge{font-size:9px}}
 @media(hover:hover) and (pointer:fine){#adSummary .ad-summary-grid>button:hover{border-color:#c6daf477;background-color:#b7d0ed0b}}
 #adminOrders .ao-search-field:focus-within{border-color:#c5dcf7;box-shadow:0 0 0 2px #c5dcf726}#adminOrders .ao-search-field input:focus-visible{outline:none}
+
+/* Saved products, formats and quantities on ready-to-send cards. */
+.ao-order-row .ao-row-contents{display:block;margin-top:8px}
+.ao-row-content-item{display:block;margin-top:4px;font-size:12px;line-height:1.5;font-weight:600;color:#c6e3ff;overflow-wrap:anywhere}
