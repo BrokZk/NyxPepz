@@ -116,10 +116,6 @@ def news():return jsonify([{"id":n.id,"title":n.title,"subtitle":n.subtitle,"ima
 from shop_packs import install_packs
 pack_shop=install_packs(app,db,Product,PromoPack,CatalogUpdate,require_admin)
 
-@app.get("/api/leaderboard")
-def leaderboard():
- rows=User.query.order_by(User.loyalty_points.desc()).limit(20).all()
- return jsonify([{"name":u.username or u.first_name or "Membre","points":u.loyalty_points} for u in rows])
 @app.get("/api/admin/users")
 def admin_users():
     if not require_admin():
@@ -559,6 +555,8 @@ from gifts import install_gifts
 gifts = install_gifts(app, db, User, Product, shop, current_user, require_admin)
 from sales import install_sales
 install_sales(app, db, shop, ConfirmedOrderEvent, gifts, require_admin)
+from leaderboard import install_leaderboard
+install_leaderboard(app, db, User, ConfirmedOrderEvent, shop, gifts, current_user)
 from giveaways import install_giveaways
 def giveaway_customer_eligible(uid):
  return bool(ConfirmedOrderEvent.query.filter_by(user_id=uid).first() or shop['Order'].query.filter(shop['Order'].user_id==uid,shop['Order'].status.in_(['paid','shipped','available','delivered']),~gifts['order_clause'](shop['Order'].id)).first())

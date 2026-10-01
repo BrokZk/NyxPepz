@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script><link rel="stylesheet" href="/static/coa.css?v=1"><link rel="stylesheet" href="/static/nutrition.css?v=2"><link rel="stylesheet" href="/static/giveaways.css?v=1">
 <link rel="stylesheet" href="/static/premium.css?v=1">
 <link rel="stylesheet" href="/static/boutique.css?v=2">
+<link rel="stylesheet" href="/static/leaderboard.css?v=1">
 <link rel="stylesheet" href="/static/admin-users.css?v=1">
 <link rel="stylesheet" href="/static/admin-orders.css?v=4"><link rel="stylesheet" href="/static/gifts.css?v=1"><link rel="stylesheet" href="/static/admin-sales.css?v=1"></head><body>
 <div class="bg"></div>
@@ -21,7 +22,7 @@
  <div class="tiles">
   <button data-go="catalog"><i data-icon="bag" aria-hidden="true"></i><b>Boutique</b><span>Voir nos<br>produits</span><em>›</em></button>
   <button data-go="parcels"><i data-icon="parcel" aria-hidden="true"></i><b>Suivi colis</b><span>Mes livraisons</span><em>›</em></button>
-  <button data-go="leaderboard"><i data-icon="trophy" aria-hidden="true"></i><b>Classement</b><span>Top clients<br>points fidélité</span><em>›</em></button>
+  <button data-go="leaderboard"><i data-icon="trophy" aria-hidden="true"></i><b>Classement</b><span>Les membres<br>du mois</span><em>›</em></button>
   <button data-go="encyclopedia"><i data-icon="cap" aria-hidden="true"></i><b>Encyclopédie peptides</b><span>Consulter les fiches</span><em>›</em></button>
   <button data-go="referral"><i data-icon="users" aria-hidden="true"></i><b>Parrainage</b><span>1 filleul acheteur<br>= 1 point parrainage</span><em>›</em></button>
   <button data-go="calculator"><i data-icon="calculator" aria-hidden="true"></i><b>Calculateur</b><span>mg, mcg et mL</span><em>›</em></button>
@@ -29,7 +30,7 @@
   <button data-go="journal"><i data-icon="calendar" aria-hidden="true"></i><b>Mon journal</b><span>Prises &amp; poids</span><em>›</em></button>
   <button data-go="protocols"><i data-icon="protocol" aria-hidden="true"></i><b>Protocoles</b><span>Consulter les documents</span><em>›</em></button>
  </div>
- <article class="rank card"><header><b><i data-icon="trophy" aria-hidden="true"></i> Top 3 du classement</b><button data-go="leaderboard" aria-label="Voir le classement">›</button></header><div id="homeLeaders" class="podium"></div></article>
+ <article class="rank card"><header><div class="home-rank-title"><b><i data-icon="trophy" aria-hidden="true"></i> Classement du mois</b><small id="homeLeaderboardMonth"></small></div><button data-go="leaderboard" aria-label="Voir le classement du mois">›</button></header><div id="homeLeaders" class="podium"></div></article>
  <div class="section-title"><h2>Nouveautés</h2><button data-go="catalog">Voir tout　›</button></div>
  <div id="newsList" class="news"></div>
 </section>
@@ -38,7 +39,13 @@
  <div class="search"><span>⌕</span><input id="search" type="search" aria-label="Rechercher un produit" placeholder="Rechercher un produit..."></div>
  <div id="filters" class="filters"></div><div id="products"></div>
 </section>
-<section id="leaderboard" class="page inner"><p class="eyebrow">COMMUNAUTÉ</p><h1>Classement</h1><div id="leaders" class="card list"></div></section>
+<section id="leaderboard" class="page inner"><p class="eyebrow">COMMUNAUTÉ</p>
+ <div class="leaderboard-heading"><div><h1>Classement du mois</h1><p id="leaderboardMonth"></p></div><button id="leadersRefresh" type="button">Actualiser</button></div>
+ <p class="leaderboard-intro">Un nouveau classement chaque mois. Vos points fidélité restent conservés et utilisables pour vos récompenses.</p>
+ <p id="leadersNotice" role="status" hidden></p><div id="leaders" class="card list" aria-busy="false"></div>
+ <p id="leadersCount" role="status"></p><button id="leadersMore" type="button" hidden>Voir la suite</button>
+ <details class="leaderboard-method"><summary>Comment fonctionne le classement ?</summary><p>Le rang dépend des points gagnés sur les commandes validées pendant le mois en cours. Utiliser une remise ne fait pas baisser votre rang. Les cadeaux et les ajustements manuels de points ne sont pas comptés.</p><p>Le classement repart à zéro le 1er de chaque mois, à l’heure de Paris. Votre solde personnel reste conservé. Seuls les rangs et les prénoms ou pseudos sont affichés.</p><p>En cas d’égalité, le membre qui a atteint ce total en premier passe devant. Aucun lot n’est attribué automatiquement.</p></details>
+</section>
 <section id="calculator" class="page inner"><p class="eyebrow">CONVERSION</p><h1>Calculateur</h1><p class="calculator-intro">Indiquez le contenu du flacon et la dose à mesurer : le calculateur affiche le volume et le repère sur la seringue.</p>
 <form id="conversionForm" class="card calculator-card" autocomplete="off"><h2>Votre flacon et votre dose</h2><div class="calculator-fields">
 <label>Fiole (mg)<input name="mass" type="text" inputmode="decimal" placeholder="0" maxlength="24" aria-describedby="massHelp"><small id="massHelp" class="calculator-field-help">La quantité totale de produit dans la fiole, indiquée sur son étiquette.</small></label>
@@ -290,5 +297,5 @@
 
 </main>
 <nav aria-label="Navigation principale"><button data-go="home"><i data-icon="home" aria-hidden="true"></i><span>Accueil</span></button><button data-go="catalog" data-nav-primary="true"><i data-icon="bag" aria-hidden="true"></i><span>Boutique</span></button><button data-go="cart"><i data-icon="cart" aria-hidden="true"></i><span>Panier <b id="cartCount" hidden></b></span></button><button data-go="referral"><i data-icon="users" aria-hidden="true"></i><span>Parrainage</span></button><button data-go="profile"><i data-icon="user" aria-hidden="true"></i><span>Profil</span></button></nav>
-<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=12.1"></script><script src="/static/app.js?v=12.2"></script><script src="/static/shop.js?v=12.6"></script><script src="/static/coa.js?v=1"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.11"></script><script src="/static/journal.js?v=12.0"></script><script src="/static/ambassadors.js?v=12.2"></script><script src="/static/nutrition.js?v=2"></script><script src="/static/giveaways.js?v=2"></script><script src="/static/admin-users.js?v=1"></script><script src="/static/admin-orders.js?v=5"></script><script src="/static/gifts.js?v=1"></script><script src="/static/admin-sales.js?v=1"></script></body></html>
+<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=12.1"></script><script src="/static/app.js?v=12.3"></script><script src="/static/shop.js?v=12.6"></script><script src="/static/coa.js?v=1"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.11"></script><script src="/static/journal.js?v=12.0"></script><script src="/static/ambassadors.js?v=12.2"></script><script src="/static/nutrition.js?v=2"></script><script src="/static/giveaways.js?v=2"></script><script src="/static/admin-users.js?v=1"></script><script src="/static/admin-orders.js?v=5"></script><script src="/static/gifts.js?v=1"></script><script src="/static/admin-sales.js?v=1"></script></body></html>
 

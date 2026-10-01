@@ -1,0 +1,26 @@
+/* Monthly community ranking. Balances are visible only in personal/admin views. */
+.home-rank-title { display: flex; flex-direction: column; gap: 5px; }
+.home-rank-title > small { color: #a5b8d3; font-size: 11px; font-weight: 400; text-transform: capitalize; }
+#homeLeaders .empty-state { grid-column: 1 / -1; margin: 0; text-align: left; font-size: 12px; line-height: 1.6; color: #aabdd7; }
+#homeLeaders .podium-member { min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: center; justify-content: flex-start; }
+#homeLeaders .podium-member > b { overflow-wrap: anywhere; white-space: normal; overflow: visible; line-height: 1.4; }
+.leaderboard-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0 18px; }
+.leaderboard-heading h1 { font-size: clamp(25px,6.6vw,35px); line-height: 1.15; margin: 0; }
+#leaderboardMonth { color: #bdd3ef; font-size: 15px; text-transform: capitalize; margin: 9px 0 0; }
+#leadersRefresh, #leadersMore { min-height: 44px; border: 1px solid #b0cbed45; border-radius: 13px; color: #d4e5fc; background: #223149; padding: 10px 15px; font-size: 13px; }
+#leadersRefresh:disabled, #leadersMore:disabled { opacity: .55; cursor: wait; }
+.leaderboard-intro { color: #afc1d9; font-size: 13px; line-height: 1.65; margin-bottom: 20px; }
+#leaders { padding: 4px 14px; }
+#leaders:empty { display: none; }
+#leaders .leader { display: flex; align-items: center; justify-content: flex-start; gap: 15px; padding: 15px 2px; border-bottom: 1px solid #adc5e425; }
+#leaders .leader:last-child { border-bottom: 0; }
+#leaders .leader-rank { flex: 0 0 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: #b3c6e0; background: #b6d3fc0b; font-size: 14px; font-weight: 600; }
+#leaders .leader-podium { font-size: 23px; background: #b6d3fc12; }
+#leaders .leader-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; color: #e8f0fc; font-size: 15px; font-weight: 600; }
+#leaders .empty-state { color: #acbfd9; font-size: 14px; line-height: 1.6; padding: 14px 2px; }
+#leadersNotice { color: #c6d7ee; font-size: 13px; line-height: 1.5; }
+#leadersCount { color: #9aafcc; font-size: 12px; margin-top: 15px; }
+#leadersMore { width: 100%; }
+.leaderboard-method { margin-top: 22px; color: #afc1d9; font-size: 12px; line-height: 1.7; }
+.leaderboard-method summary { cursor: pointer; padding: 10px 0; color: #bfd3ef; }
+#leadersMore[hidden], #leadersNotice[hidden] { display: none; }

@@ -13,7 +13,7 @@ function go(id){
  $$(".page").forEach(x=>x.classList.remove("active"));target.classList.add("active");
  $$("nav button").forEach(x=>{const active=x.dataset.go===id&&(id!=="catalog"||x.hasAttribute("data-nav-primary"));x.classList.toggle("active",active);if(active)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
  if(id==="catalog"&&!returningToPage){$("#search").value="";renderCatalog("Tous")}
- if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo({top:0,behavior:'instant'});
+ if(id==="home"&&me.telegram_id)loadHomeLeaders();if(id==="tracking")loadWeights();if(id==="leaderboard")loadLeaders();if(id==="admin")loadAdmin();scrollTo({top:0,behavior:'instant'});
 }
 function goBack(){
  const dialog=$('dialog[open]');if(dialog){dialog.close();return;}
@@ -138,8 +138,55 @@ async function loadPacks(){
 }
 
 async function loadNews(){try{let a=await api("/api/news");$("#newsList").innerHTML=a.slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" loading="lazy" alt="${escapeHTML(n.title)}" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
-async function loadLeaders(){try{let a=await api("/api/leaderboard");$("#leaders").innerHTML=a.map((x,i)=>`<div class="leader"><span>${i+1}. ${escapeHTML(x.name)}</span><b>${x.points} pts</b></div>`).join("")||"Aucun classement."}catch(e){toast(e.message)}}
-async function loadHomeLeaders(){try{let a=(await api("/api/leaderboard")).slice(0,3);$("#homeLeaders").innerHTML=a.map((x,i)=>`<div class="podium-member"><span class="podium-medal" aria-label="Place ${i+1}">${["🥇","🥈","🥉"][i]}</span><b>${escapeHTML(x.name)}</b><span class="podium-points">${Number(x.points)||0} points</span></div>`).join("")||'<p class="empty-state">Le classement apparaîtra avec les premiers membres.</p>'}catch(e){$("#homeLeaders").innerHTML='<p class="empty-state">Classement momentanément indisponible.</p>'}}
+let leaderboardRequest=0,homeLeaderboardRequest=0,leaderboardPeriod='',leaderboardResetTimer;
+function scheduleLeaderboardReset(data){
+ clearTimeout(leaderboardResetTimer);
+ const reset=Number(data.next_reset_at);if(!Number.isFinite(reset))return;
+ // Long months exceed the browser's maximum timer length; fetch again at the
+ // capped delay. A hidden mini-app refreshes when it becomes visible instead.
+ const delay=Math.min(2147483000,Math.max(60000,reset*1000-Date.now()+1000));
+ leaderboardResetTimer=setTimeout(refreshVisibleLeaderboard,delay);
+}
+function refreshVisibleLeaderboard(){
+ if(document.hidden||!me.telegram_id)return;
+ if($('#leaderboard').classList.contains('active'))loadLeaders();
+ else if($('#home').classList.contains('active'))loadHomeLeaders();
+}
+async function loadLeaders(page=1){
+ const request=++leaderboardRequest,list=$('#leaders'),more=$('#leadersMore'),notice=$('#leadersNotice'),refresh=$('#leadersRefresh');
+ if(page===1){list.replaceChildren();more.hidden=true;$('#leadersCount').textContent='';}
+ list.setAttribute('aria-busy','true');refresh.disabled=true;more.disabled=true;notice.textContent='Chargement du classement…';notice.hidden=false;
+ try{
+  const data=await api('/api/leaderboard?page='+page,{cache:'no-store'});if(request!==leaderboardRequest)return;
+  if(page>1&&(leaderboardPeriod!==data.period||data.page!==page)){loadLeaders();return;}
+  leaderboardPeriod=data.period;$('#leaderboardMonth').textContent=data.period_label;
+  const rows=data.entries.map(x=>`<div class="leader"><span class="leader-rank ${x.rank<=3?'leader-podium':''}" aria-label="Rang ${Number(x.rank)}">${x.rank<=3?['🥇','🥈','🥉'][x.rank-1]:Number(x.rank)}</span><b class="leader-name">${escapeHTML(x.name)}</b></div>`).join('');
+  list.insertAdjacentHTML('beforeend',rows);
+  if(!data.total)list.innerHTML='<p class="empty-state">Le classement de ce mois apparaîtra après les premières commandes validées.</p>';
+  const shown=list.querySelectorAll('.leader').length;
+  $('#leadersCount').textContent=data.total?`${shown} membre${shown>1?'s':''} affiché${shown>1?'s':''} sur ${data.total}`:'';
+  more.hidden=!data.has_next;more.textContent='Voir la suite';more.onclick=()=>loadLeaders(data.page+1);
+  notice.hidden=true;scheduleLeaderboardReset(data);
+ }catch(e){
+  if(request!==leaderboardRequest)return;
+  notice.textContent='Le classement est momentanément indisponible. Réessayez.';
+  more.hidden=false;more.textContent='Réessayer';more.onclick=()=>loadLeaders(page);
+ }finally{if(request===leaderboardRequest){list.setAttribute('aria-busy','false');refresh.disabled=false;more.disabled=false;}}
+}
+async function loadHomeLeaders(){
+ const request=++homeLeaderboardRequest;
+ try{
+  const data=await api('/api/leaderboard?page=1',{cache:'no-store'});if(request!==homeLeaderboardRequest)return;
+  const entries=data.entries.slice(0,3),target=$('#homeLeaders');
+  $('#homeLeaderboardMonth').textContent=data.period_label;
+  target.style.gridTemplateColumns=`repeat(${Math.max(1,entries.length)},minmax(0,1fr))`;
+  target.innerHTML=entries.map(x=>`<div class="podium-member"><span class="podium-medal" aria-label="Rang ${Number(x.rank)}">${['🥇','🥈','🥉'][x.rank-1]}</span><b>${escapeHTML(x.name)}</b></div>`).join('')||'<p class="empty-state">Un nouveau mois commence. Le classement apparaîtra après les premières commandes validées.</p>';
+  scheduleLeaderboardReset(data);
+ }catch(e){if(request===homeLeaderboardRequest){$('#homeLeaderboardMonth').textContent='';$('#homeLeaders').innerHTML='<p class="empty-state">Classement momentanément indisponible.</p>';}}
+}
+$('#leadersRefresh').onclick=()=>loadLeaders();
+document.addEventListener('visibilitychange',refreshVisibleLeaderboard);
+
 $("#copyCode").onclick=async()=>{try{await navigator.clipboard.writeText(me.referral_code);toast("Code copié")}catch{toast(me.referral_code||"Code indisponible")}};
 $("#applyReferral").onclick=async()=>{try{await api("/api/referral/apply",{method:"POST",body:JSON.stringify({code:$("#applyCode").value})});toast("Parrain enregistré")}catch(e){toast(e.message)}};
 async function loadWeights(){try{let a=await api("/api/weights");chart?.destroy();chart=new Chart($("#weightChart"),{type:"line",data:{labels:a.map(x=>new Date(x.date).toLocaleDateString("fr-FR")),datasets:[{label:"Poids (kg)",data:a.map(x=>x.weight),tension:.35}]},options:{responsive:true,maintainAspectRatio:false}})}catch(e){toast(e.message)}}
