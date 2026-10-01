@@ -1,7 +1,30 @@
 const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand()}
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let activeCategory="Tous";let me={},products=[],chart,packs=[],promoIndex=0,promoTimer,promoTouchX=0;
 const toast=m=>{let t=$("#toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2200)};
-async function api(u,o={}){o.headers={"Content-Type":"application/json",...(o.headers||{})};let r=await fetch(u,o),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur");return d}
+let telegramReconnect=null;
+async function restoreTelegramSession(){
+ const initData=window.Telegram?.WebApp?.initData||"";
+ if(!initData)throw Error("Votre connexion Telegram a expiré. Fermez la mini-app puis rouvrez-la depuis le bot.");
+ if(!telegramReconnect){
+  telegramReconnect=(async()=>{
+   const response=await fetch("/api/auth/telegram",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData})});
+   if(!response.ok)throw Error("Votre connexion Telegram a expiré. Fermez la mini-app puis rouvrez-la depuis le bot.");
+  })().finally(()=>{telegramReconnect=null;});
+ }
+ return telegramReconnect;
+}
+async function api(u,o={}){
+ const options={...o,credentials:"same-origin",headers:{"Content-Type":"application/json",...(o.headers||{})}};
+ let r=await fetch(u,options);
+ // A 401 is returned before these endpoints process the request. Retry once only.
+ if(r.status===401&&typeof u==="string"&&u.startsWith("/api/")&&u!=="/api/auth/telegram"){
+  await restoreTelegramSession();
+  r=await fetch(u,options);
+ }
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok)throw Error(r.status===401?"Votre connexion Telegram a expiré. Fermez la mini-app puis rouvrez-la depuis le bot.":d.error||"Erreur");
+ return d;
+}
 const pageTrail=[];let returningToPage=false;
 function go(id){
  const target=$("#"+id);if(!target?.classList.contains('page'))return;
@@ -317,3 +340,4 @@ async function editPackComposition(id){
  await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
  }catch(e){toast(e.message);}
 }
+
