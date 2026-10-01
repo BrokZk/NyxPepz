@@ -40,7 +40,7 @@ function vial(p){
  // bundled catalogue artwork and missing photos with the new label template.
  if(p.image_url&&!p.image_url.startsWith("/static/"))return `<div class="product-photo"><img loading="lazy" src="${escapeHTML(p.image_url)}" alt="${escapeHTML(p.name)}"></div>`;
  const name=String(p.name||"NyxPepz").toUpperCase(),dose=String(p.format||"").trim();
- return `<div class="product-photo branded-photo"><div class="branded-vial" role="img" aria-label="Visuel ${escapeHTML(p.name)} ${escapeHTML(dose)}"><img loading="lazy" src="/static/nyx-vial.png" alt="" width="1024" height="1536"><div class="vial-print" aria-hidden="true"><span class="vial-brand"><b>Nyx</b>Pepz</span><span class="vial-rule"></span><span class="vial-name ${name.length>11?'long-name':''}">${escapeHTML(name)}</span>${dose?`<span class="vial-dose ${dose.length>10?'long-dose':''}">${escapeHTML(dose)}</span>`:''}<span class="vial-bottom-rule"></span></div></div></div>`
+ return `<div class="product-photo branded-photo"><div class="branded-vial" role="img" aria-label="Visuel ${escapeHTML(p.name)} ${escapeHTML(dose)}"><img loading="lazy" src="/static/nyx-vial-neo.webp" alt="" width="1024" height="1536"><div class="vial-print" aria-hidden="true"><span class="vial-brand"><b>Nyx</b>Pepz</span><span class="vial-rule"></span><span class="vial-name ${name.length>11?'long-name':''}">${escapeHTML(name)}</span>${dose?`<span class="vial-dose ${dose.length>10?'long-dose':''}">${escapeHTML(dose)}</span>`:''}<span class="vial-bottom-rule"></span></div></div></div>`
 }
 function includedSupplies(p){
  // Explicit catalogue matches keep accessories, water sold separately and
@@ -65,20 +65,29 @@ function renderCatalog(cat=activeCategory){
  const items=catalogItems();
  activeCategory=cat;
  const q=($("#search").value||"").trim().toLowerCase();
- const order=["Packs & promos","Perte de graisse","Régénération","Beauté · peau","Nootropiques","Libido","Performance","Longévité"]; const cats=[...new Set(items.map(p=>p.cat))].sort((a,b)=>(order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99));
+ const order=["Perte de graisse","Beauté · peau","Nootropiques","Libido","Accessoires","Packs & promos"];
+ const aliases={"Perte de poids":"Perte de graisse","Beauté / Peau":"Beauté · peau","Beauté / peau":"Beauté · peau","Nootropique":"Nootropiques","Accessoire":"Accessoires"};
+ const categoryOf=p=>aliases[p.cat]||p.cat;
+ const extras=[...new Set(items.map(categoryOf))].filter(c=>!order.includes(c)).sort((a,b)=>String(a).localeCompare(String(b),'fr'));
+ const cats=order;
  const landing=cat==="Tous"&&!q;
  const filters=$("#filters"),target=$("#products");
  filters.classList.toggle('category-menu',landing);
  filters.classList.toggle('category-toolbar',!landing);
  if(landing){
-  filters.innerHTML=cats.map(c=>`<button data-cat="${escapeHTML(c)}"><span class="category-menu-icon" aria-hidden="true">${categoryIcons[c]||'◇'}</span><span><b>${escapeHTML(categoryLabels[c]||c)}</b><small>${items.filter(p=>p.cat===c).length} produit${items.filter(p=>p.cat===c).length===1?"":"s"}</small></span><em aria-hidden="true">›</em></button>`).join('');
-  target.innerHTML=cats.length?'':'<p class="empty-state">Le catalogue sera bientôt disponible.</p>';
-  filters.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{renderCatalog(b.dataset.cat);scrollTo(0,0);});
+  const symbols={"Perte de graisse":'<path d="M12 3v18M5 7h14M5 7l-3 7h6L5 7Zm14 0-3 7h6l-3-7ZM8 21h8"/>',"Beauté · peau":'<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6Z"/>',"Nootropiques":'<path d="M12 5c-3-5-9 0-7 4-4 2-2 8 1 8 0 4 6 5 6 1V5Zm0 0c3-5 9 0 7 4 4 2 2 8-1 8 0 4-6 5-6 1M8 9v4m8-4v4"/>',"Libido":'<path d="M12 21 3 12C-2 4 8 0 12 7 16 0 26 4 21 12L12 21Z"/>',"Accessoires":'<path d="M12 4v16M4 12h16"/>',"Packs & promos":'<path d="m3 7 9-5 9 5v11l-9 5-9-5V7Zm0 0 9 5 9-5M12 12v11M7 5l10 5"/>'};
+  const card=c=>{const count=items.filter(p=>categoryOf(p)===c).length;return `<button type="button" data-cat="${escapeHTML(c)}"><span class="category-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${symbols[c]||'<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'}</svg></span><span><b>${escapeHTML(categoryLabels[c]||c)}</b><small>${count} produit${count===1?'':'s'}</small></span><em aria-hidden="true">›</em></button>`;};
+  filters.innerHTML=cats.map(card).join('');
+  target.innerHTML=extras.length?`<div class="catalog-extra"><div class="filters category-menu">${extras.map(card).join('')}</div></div>`:'';
+  const offer=items.find(p=>p.kind==='pack');
+  if(offer){const panel=document.createElement('article');panel.className='neo-catalog-offer';panel.innerHTML=`<div class="neo-offer-copy"><small>PACKS &amp; PROMOS</small><h2>${escapeHTML(offer.name)}</h2><p>${escapeHTML(offer.subtitle||offer.format)}</p><strong>${escapeHTML(offer.price)} €</strong><button type="button">Voir ce pack →</button></div><div class="neo-offer-visual" aria-hidden="true">${packVisual(offer)}</div>`;panel.querySelector('button').onclick=()=>openPack(offer.id);target.append(panel);}
+
+  document.querySelectorAll('#catalog [data-cat]').forEach(b=>b.onclick=()=>{renderCatalog(b.dataset.cat);scrollTo(0,0);});
   $('#catalog .catalog-head h1').textContent='Boutique';
   $('#catalog .catalog-head p').textContent='Choisissez une catégorie';
   return;
  }
- const shown=items.filter(p=>(cat==="Tous"||p.cat===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q));
+ const shown=items.filter(p=>(cat==="Tous"||categoryOf(p)===cat)&&(`${p.name} ${p.format}`).toLowerCase().includes(q));
  filters.innerHTML='<button class="category-back">‹ Toutes les catégories</button>';
  filters.querySelector('button').onclick=()=>{$('#search').value='';renderCatalog('Tous');scrollTo(0,0);};
  $('#catalog .catalog-head h1').textContent=cat==='Tous'?'Recherche':categoryLabels[cat]||cat;

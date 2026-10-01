@@ -1,0 +1,51 @@
+{
+  "feature_ids_preserved": 382,
+  "navigation_targets_preserved": 24,
+  "backend_and_feature_modules_unchanged": [
+    "ambassadors.py",
+    "app.js",
+    "app.py",
+    "bot_launcher.py",
+    "gifts.py",
+    "giveaways.py",
+    "giveaway_delivery.py",
+    "journal.py",
+    "leaderboard.py",
+    "nutrition.py",
+    "sales.py",
+    "shop.py",
+    "shop_delivery.py",
+    "shop_inventory.py",
+    "shop_packs.py",
+    "static/admin-orders.js",
+    "static/admin-sales.js",
+    "static/admin-users.js",
+    "static/ambassadors.js",
+    "static/calculator.js",
+    "static/coa.js",
+    "static/encyclopedia.js",
+    "static/gifts.js",
+    "static/giveaways.js",
+    "static/journal.js",
+    "static/nutrition.js",
+    "static/protocols.js",
+    "static/shop.js",
+    "tests/shop_test_helpers.py",
+    "tests/test_app_updates.py"
+  ],
+  "changed_files": [
+    "templates/index.html",
+    "static/app.js",
+    "static/mobile.js",
+    "static/neo-biotech.css",
+    "static/nyx-vial-neo.webp",
+    "static/neo-dna.webp"
+  ],
+  "backend_tests": {
+    "passed": 8,
+    "failed": 2,
+    "same_failures_on_original": true
+  },
+  "calculator_tests": "passed",
+  "preview": "Local fixture using public live catalog; no production account or payment modified"
+}

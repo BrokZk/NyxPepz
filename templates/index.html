@@ -9,22 +9,23 @@
 <link rel="stylesheet" href="/static/boutique.css?v=2">
 <link rel="stylesheet" href="/static/leaderboard.css?v=1">
 <link rel="stylesheet" href="/static/admin-users.css?v=1">
-<link rel="stylesheet" href="/static/admin-orders.css?v=4"><link rel="stylesheet" href="/static/gifts.css?v=1"><link rel="stylesheet" href="/static/admin-sales.css?v=1"></head><body>
+<link rel="stylesheet" href="/static/admin-orders.css?v=4"><link rel="stylesheet" href="/static/gifts.css?v=1"><link rel="stylesheet" href="/static/admin-sales.css?v=1"><link rel="stylesheet" href="/static/neo-biotech.css?v=1"></head><body>
 <div class="bg"></div>
 <header class="tgbar"><button>Fermer</button><div><b>NyxPepz</b><small>mini-application</small></div><i>•••</i></header>
-<main>
+<main><header class="neo-masthead"><div class="brand premium-brand" aria-label="NyxPepz"><span class="brand-word">NyxPepz</span><span class="brand-moon" aria-hidden="true"></span></div><button type="button" data-go="cart" aria-label="Ouvrir mon panier"><i data-icon="cart" aria-hidden="true"></i></button></header>
 <section id="home" class="page active">
- <div class="hero-zone"><div class="welcome"><div><h1>Salut <span id="hello">Nyx</span> 👋</h1><p>Bienvenue chez NyxPepz</p></div><div class="brand premium-brand" aria-label="NyxPepz"><span class="brand-word">NyxPepz</span><span class="brand-moon" aria-hidden="true"></span></div><div class="dna-glow"></div><div class="dna-scene" aria-hidden="true"><canvas id="dnaCanvas"></canvas></div></div>
+ <div class="hero-zone"><div class="welcome"><div><h1>Salut <span id="hello">Nyx</span> 👋</h1><p>Bienvenue dans votre espace NyxPepz.</p></div><div class="dna-glow"></div><div class="dna-scene" aria-hidden="true"><canvas id="dnaCanvas"></canvas></div></div>
+ <article class="loyal card"><div class="star" data-icon="star" aria-hidden="true"></div><div><p>Mes points fidélité</p><strong><span id="points">0</span> points</strong><div class="progress"><i id="progressbar"></i></div><small>Encore <span id="remaining">200</span> points avant la prochaine récompense</small></div><em data-icon="gift" aria-hidden="true"></em></article>
  <div class="promo-carousel" id="promoCarousel"><div id="promoTrack" class="promo-track"></div></div>
  <div id="promoDots" class="dots promo-dots"></div></div>
  <button class="nutrition-shortcut" data-go="nutrition"><i aria-hidden="true">◒</i><span><b>Mon suivi nutrition</b><small>Repas, calories et protéines</small></span><em aria-hidden="true">›</em></button><button class="giveaway-shortcut" type="button" data-go="giveaways"><span aria-hidden="true">🎁</span><span><b>Jeux concours</b><small>Découvrir les lots et s’inscrire</small></span><em aria-hidden="true">›</em></button>
- <article class="loyal card"><div class="star" data-icon="star" aria-hidden="true"></div><div><p>Mes points fidélité</p><strong><span id="points">0</span> points</strong><div class="progress"><i id="progressbar"></i></div><small>Encore <span id="remaining">200</span> points avant la prochaine récompense</small></div><em data-icon="gift" aria-hidden="true"></em></article>
- <div class="tiles">
-  <button data-go="catalog"><i data-icon="bag" aria-hidden="true"></i><b>Boutique</b><span>Voir nos<br>produits</span><em>›</em></button>
+
+ <p class="neo-section-label">VOTRE ESPACE</p><div class="tiles">
+  <button data-go="catalog"><i data-icon="bag" aria-hidden="true"></i><b>Boutique</b><span>Voir nos produits</span><em>›</em></button>
   <button data-go="parcels"><i data-icon="parcel" aria-hidden="true"></i><b>Suivi colis</b><span>Mes livraisons</span><em>›</em></button>
-  <button data-go="leaderboard"><i data-icon="trophy" aria-hidden="true"></i><b>Classement</b><span>Les membres<br>du mois</span><em>›</em></button>
+  <button data-go="leaderboard"><i data-icon="trophy" aria-hidden="true"></i><b>Classement</b><span>Les membres du mois</span><em>›</em></button>
   <button data-go="encyclopedia"><i data-icon="cap" aria-hidden="true"></i><b>Encyclopédie peptides</b><span>Consulter les fiches</span><em>›</em></button>
-  <button data-go="referral"><i data-icon="users" aria-hidden="true"></i><b>Parrainage</b><span>1 filleul acheteur<br>= 1 point parrainage</span><em>›</em></button>
+  <button data-go="referral"><i data-icon="users" aria-hidden="true"></i><b>Parrainage</b><span>1 filleul acheteur = 1 point parrainage</span><em>›</em></button>
   <button data-go="calculator"><i data-icon="calculator" aria-hidden="true"></i><b>Calculateur</b><span>mg, mcg et mL</span><em>›</em></button>
   <button data-go="tracking"><i data-icon="trend" aria-hidden="true"></i><b>Suivi du poids</b><span>Suivez vos progrès</span><em>›</em></button>
   <button data-go="journal"><i data-icon="calendar" aria-hidden="true"></i><b>Mon journal</b><span>Prises &amp; poids</span><em>›</em></button>
@@ -297,5 +298,5 @@
 
 </main>
 <nav aria-label="Navigation principale"><button data-go="home"><i data-icon="home" aria-hidden="true"></i><span>Accueil</span></button><button data-go="catalog" data-nav-primary="true"><i data-icon="bag" aria-hidden="true"></i><span>Boutique</span></button><button data-go="cart"><i data-icon="cart" aria-hidden="true"></i><span>Panier <b id="cartCount" hidden></b></span></button><button data-go="referral"><i data-icon="users" aria-hidden="true"></i><span>Parrainage</span></button><button data-go="profile"><i data-icon="user" aria-hidden="true"></i><span>Profil</span></button></nav>
-<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=12.1"></script><script src="/static/app.js?v=12.3"></script><script src="/static/shop.js?v=12.6"></script><script src="/static/coa.js?v=1"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.11"></script><script src="/static/journal.js?v=12.0"></script><script src="/static/ambassadors.js?v=12.2"></script><script src="/static/nutrition.js?v=2"></script><script src="/static/giveaways.js?v=2"></script><script src="/static/admin-users.js?v=1"></script><script src="/static/admin-orders.js?v=5"></script><script src="/static/gifts.js?v=1"></script><script src="/static/admin-sales.js?v=1"></script></body></html>
+<div id="toast" role="status" aria-live="polite"></div><script src="/static/mobile.js?v=neo-1"></script><script src="/static/app.js?v=neo-1"></script><script src="/static/shop.js?v=12.6"></script><script src="/static/coa.js?v=1"></script><script src="/static/calculator.js?v=11.2"></script><script src="/static/encyclopedia.js?v=11.0"></script><script src="/static/protocols.js?v=11.11"></script><script src="/static/journal.js?v=12.0"></script><script src="/static/ambassadors.js?v=12.2"></script><script src="/static/nutrition.js?v=2"></script><script src="/static/giveaways.js?v=2"></script><script src="/static/admin-users.js?v=1"></script><script src="/static/admin-orders.js?v=5"></script><script src="/static/gifts.js?v=1"></script><script src="/static/admin-sales.js?v=1"></script></body></html>
 

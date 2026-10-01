@@ -41,7 +41,7 @@
  let needsResize=true,drawable=false,pageActive=true;
  let points=[],objects=[];
  const TAU=Math.PI*2,SPRITE_DPR=2;
- const particles=Array.from({length:48},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,size:i%4,speed:.06+(i%5)*.014,phase:i*2.1}));
+ const particles=Array.from({length:16},(_,i)=>({x:((i*73+29)%281)/281,y:((i*43+19)%157)/157,size:i%4,speed:.06+(i%5)*.014,phase:i*2.1}));
  function texture(w,h,paint){
   const image=document.createElement('canvas');image.width=w*SPRITE_DPR;image.height=h*SPRITE_DPR;
   const brush=image.getContext('2d');brush.scale(SPRITE_DPR,SPRITE_DPR);paint(brush,w,h);return image;
@@ -61,14 +61,6 @@
   g.addColorStop(0,'rgba(50,112,208,.45)');g.addColorStop(.48,'rgba(149,207,255,.63)');
   g.addColorStop(.52,'rgba(94,167,244,.63)');g.addColorStop(1,'rgba(26,120,190,.45)');
   c.fillStyle=g;c.fillRect(0,0,64,4);
- });
- const meteorTail=texture(72,8,c=>{
-  const g=c.createLinearGradient(0,0,72,0);g.addColorStop(0,'#c0e2ff');g.addColorStop(1,'rgba(110,177,255,0)');
-  c.strokeStyle=g;c.lineWidth=1.3;c.lineCap='round';c.beginPath();c.moveTo(0,4);c.lineTo(72,4);c.stroke();
- });
- const meteorHead=texture(36,36,c=>{
-  c.fillStyle='#e8f6ff';c.shadowColor='#87baff';c.shadowBlur=16;
-  c.beginPath();c.arc(18,18,1.3,0,TAU);c.fill();
  });
  function rebuildGeometry(){
   points=[];objects=[];
@@ -115,14 +107,6 @@
    ctx.globalAlpha=.5+.2*Math.sin(angle+p.phase);
    ctx.drawImage(sparkles[p.size],x-16,y-16,32,32);
   }
-  for(let n=0;n<2;n++){
-   const t=(elapsed+n*2.2)%4.4;if(t>2.8)continue;
-   const progress=t/2.8,cycle=Math.floor((elapsed+n*2.2)/4.4);
-   const x=width*(1.06-progress*.95),y=height*(.025+((cycle+n)%3)*.025)+progress*height*.12;
-   ctx.globalAlpha=Math.sin(progress*Math.PI)*.95;
-   ctx.save();ctx.translate(x,y);ctx.rotate(-.40677);ctx.drawImage(meteorTail,0,-4,72,8);ctx.restore();
-   ctx.drawImage(meteorHead,x-18,y-18,36,36);
-  }
   const radius=Math.min(32,width*.075),sin=Math.sin(angle),cos=Math.cos(angle);
   for(const row of points){
    const phaseCos=row[0].cos*cos-row[0].sin*sin,phaseSin=row[0].sin*cos+row[0].cos*sin;
@@ -151,14 +135,16 @@
   }
   ctx.globalAlpha=1;
  }
- function running(){return pageActive&&!document.hidden;}
+ const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+ function running(){return pageActive&&!document.hidden&&!reducedMotion.matches;}
+ reducedMotion.addEventListener('change',()=>{needsResize=true;if(reducedMotion.matches){resize();if(drawable)draw();}resume();});
  function tick(time){
   frame=null;if(!running())return;
   if(needsResize)resize();
   // No 33 ms gate: every display frame is used, including 90/120 Hz screens.
   // Reset after a real pause and cap a long stall so resuming cannot teleport stars.
   const dt=last===null?0:Math.min(Math.max(time-last,0),50);last=time;
-  if(drawable){angle+=dt*.0008;elapsed+=dt*.001;draw();}
+  if(drawable){angle+=dt*.00012;elapsed+=dt*.001;draw();}
   frame=requestAnimationFrame(tick);
  }
  function resume(){
@@ -166,12 +152,13 @@
   if(!active){if(frame!==null)cancelAnimationFrame(frame);frame=null;last=null;return;}
   if(frame===null){last=null;frame=requestAnimationFrame(tick);}
  }
- function queueResize(){needsResize=true;resume();}
+ function queueResize(){needsResize=true;if(reducedMotion.matches){resize();if(drawable)draw();}resume();}
  if(typeof ResizeObserver==='function')new ResizeObserver(queueResize).observe(canvas);
  window.addEventListener('resize',queueResize);
  window.addEventListener('pageshow',()=>{pageActive=true;queueResize();});
  window.addEventListener('pagehide',()=>{pageActive=false;resume();});
  window.addEventListener('focus',queueResize);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)needsResize=true;resume();});
+ if(reducedMotion.matches){resize();if(drawable)draw();}
  resume();
 })();

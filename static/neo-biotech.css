@@ -1,0 +1,202 @@
+/* Neo Biotech: presentation layer, loaded after all feature styles. */
+:root {
+  --nyx-ink:#eaf4fc; --nyx-soft:#b1c6d7; --nyx-muted:#94aebe;
+  --nyx-ice:#67ddeb; --nyx-line:#274252; --nyx-line-strong:#396273;
+  --nyx-panel:linear-gradient(145deg,#10232ef5,#08151ff7);
+  --nyx-primary:linear-gradient(120deg,#51c9f6,#70ece0);
+  --nyx-secondary:linear-gradient(145deg,#193340,#10232e);
+  --nyx-shadow:inset 0 1px 0 #c2f5ff08,0 8px 24px #00071024;
+  --blue:#67ddeb; --muted:#94aebe; --edge:#274252;
+}
+body { background:#040b12; color:var(--nyx-ink); font-family:system-ui,-apple-system,'Segoe UI',sans-serif; line-height:1.5; }
+main { max-width:780px; }
+button,input,select,textarea { font-family:inherit; }
+button { transition:background .18s,border-color .18s; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:2px solid #70ece0; outline-offset:3px; }
+.bg { background:radial-gradient(ellipse at 90% 0,#123b4d66,transparent 60%),#040b12; }
+.sapphire-veils { opacity:.16; filter:saturate(.6); }
+.bg .dna-scene { opacity:.3!important; }
+.hero-zone { background:none; }
+.hero-zone:before,.hero-zone:after { display:none; }
+.welcome { min-height:160px; padding-top:28px; background:none; }
+.welcome>div:first-child { max-width:68%; }
+.welcome h1 { font-size:clamp(25px,6vw,36px); font-weight:650; letter-spacing:-1px; line-height:1.2; }
+.welcome h1 span { color:#70ece0; }
+.welcome p { font-size:13px; color:var(--nyx-soft); }
+.neo-kicker { display:block; color:#67ddeb; font-size:10px; font-weight:700; letter-spacing:2.4px; margin-bottom:12px; }
+.welcome .premium-brand { top:31px; }
+.welcome .brand-word { font-family:inherit; font-size:clamp(21px,5.5vw,30px); font-weight:750; background:linear-gradient(110deg,#e7faff,#70ece0); background-clip:text; -webkit-background-clip:text; }
+.welcome .brand-moon { opacity:.65; }
+.neo-signature { display:flex; align-items:center; gap:8px; margin:14px 0 0; color:#a4c4d1; font-size:10px; letter-spacing:1.4px; }
+.neo-signature:before { content:''; width:5px; height:5px; border-radius:50%; background:#70ece0; box-shadow:0 0 9px #70ece04d; }
+.card,.tiles button,.news article,.product,.gw-card,.gift-card,.nut-metric,.nut-meal,.nut-editor,.nut-profile,.nut-history-day,.admin-panel,.reward-tier { background:var(--nyx-panel); border-color:var(--nyx-line); box-shadow:var(--nyx-shadow); border-radius:16px; }
+.inner h1,.catalog-head h1 { letter-spacing:-.8px; font-weight:650; line-height:1.2; margin-bottom:12px; }
+.eyebrow { color:#67ddeb; font-size:10px; letter-spacing:2px; }
+.promo-carousel { border-color:#325765; border-radius:18px; background:#081823; box-shadow:var(--nyx-shadow); }
+.promo-slide { background:radial-gradient(ellipse at 92% 50%,#22657933,transparent 65%),linear-gradient(120deg,#102633,#07131d); }
+.promo-copy small { color:#70ece0; font-size:10px; letter-spacing:2px; }
+.promo-copy h2 { font-weight:650; line-height:1.2; }
+.promo-copy strong { color:#8be9f0; }
+.promo-copy p { color:#b1c6d7; }
+.promo-copy button,.shop-primary,.add-to-cart,.nut-primary,.gw-primary,.gift-primary,.form>button,.codebox button,.admin-form>button { background:var(--nyx-primary); color:#04212a; border-color:#70d8e7; box-shadow:none; font-weight:750; border-radius:11px; }
+.promo-img { filter:drop-shadow(0 10px 14px #0008)!important; }
+.promo-wave { opacity:.2; }
+.promo-dots button.active:before { background:#70ece0; box-shadow:none; }
+.nutrition-shortcut,.giveaway-shortcut { background:var(--nyx-panel); border-color:var(--nyx-line); border-radius:16px; box-shadow:none; }
+.nutrition-shortcut>i,.giveaway-shortcut>span:first-child { background:#6de5e010; color:#70ece0; border-color:#355765; }
+.loyal { margin-top:16px; }
+.loyal strong { color:#8be9f0; font-weight:650; }
+.loyal .star { background:#70ece00c; border-color:#386474; border-radius:11px; box-shadow:none; }
+.star svg { color:#70ece0; fill:none; }
+.progress { background:#19323f; }
+.progress i { background:var(--nyx-primary); box-shadow:none; }
+.neo-section-label { margin:25px 0 12px; font-size:10px; font-weight:750; letter-spacing:2px; color:#94aebe; }
+.tiles { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.tiles button { text-align:left; align-items:flex-start; min-height:126px; padding:18px 15px; }
+.tiles i { color:#67ddeb; filter:none; height:28px; margin-bottom:12px; }
+.tiles i svg { width:25px; height:25px; }
+.tiles b { font-size:13px; font-weight:650; line-height:1.3; }
+.tiles span { font-size:11px; color:var(--nyx-muted); }
+.tiles span br { display:none; }
+.tiles button:first-child { border-color:#4b8591; background:linear-gradient(145deg,#173b47,#0c2531); }
+.rank header,.cart-item,.checkout-line,.grand-total { border-color:var(--nyx-line); }
+.rank header i,.section-title button,.rank header button,.loyal em,.journal-refresh,.gift-link,.gw-link { color:#67ddeb; }
+.catalog-head { background:radial-gradient(ellipse at 100% 0,#25748522,transparent 65%); min-height:150px; }
+.catalog-head:after { opacity:.12; }
+.catalog-head p { font-size:13px; color:var(--nyx-soft); }
+.catalog-brand { text-shadow:none; color:#78dfe4; }
+.catalog-brand b { font-size:32px; }
+.catalog-brand strong { font:700 18px system-ui; }
+.trust { gap:12px; }
+.trust span { color:#67ddeb; }
+.trust small { color:#a9c5d2; }
+.search { display:flex; position:relative; }
+.search span { position:absolute; left:15px; }
+.search input { width:100%; margin:0; border-radius:12px; border-color:#355160; background:#0c1c27; }
+.filters.category-menu { gap:10px; }
+.filters.category-menu button { background:var(--nyx-panel); border-color:var(--nyx-line); border-radius:14px; min-height:96px; padding:16px 12px; }
+.category-menu b { font-size:13px; font-weight:650; }
+.category-menu small { color:var(--nyx-muted); }
+.category-menu em { color:#67ddeb; }
+.category-menu-icon { color:#70ece0; font-size:22px; }
+.category-menu-icon svg { width:25px; height:25px; display:block; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.catalog-extra { margin:4px 0 20px; color:var(--nyx-soft); }
+.catalog-extra summary { cursor:pointer; min-height:44px; padding:10px 0; font-size:13px; }
+.catalog-extra .category-menu { margin-top:8px; }
+.filters:not(.category-menu) button,.order-filters button { background:#112733; border-color:#355160; color:var(--nyx-soft); }
+.filters:not(.category-menu) button.active,.order-filters button[aria-pressed=true] { background:var(--nyx-primary); color:#04212a; }
+.product-grid { gap:12px; }
+.product { padding:14px 12px; border-radius:16px; }
+.product h3 { font-size:15px; font-weight:650; }
+.product>strong { color:#8be9f0; font-weight:650; }
+.product .branded-photo { background:radial-gradient(ellipse at 50% 70%,#46c3d516,transparent 65%); }
+.branded-vial>img,.product .branded-vial>img,.promo-vials .branded-vial>img,.protocol-vial .branded-vial>img { filter:hue-rotate(-110deg) saturate(.65); }
+.vial-print { background:linear-gradient(120deg,#12303a,#071721); color:#e5f5fa; border:1px solid #3e727e; border-radius:2px; padding:4px 2px; }
+.vial-brand { color:#76e7e6; font-family:system-ui,sans-serif; font-weight:650; font-size:11px; letter-spacing:-.6px; }
+.vial-rule,.vial-bottom-rule { background:#67ddeb; opacity:.65; }
+.vial-rule { margin:4px 0 6px; }
+.vial-name { font-size:8.2px; letter-spacing:-.35px; font-weight:750; white-space:nowrap; }
+.vial-name.long-name { font-size:8px; }
+.vial-name.long-name { white-space:normal; }
+.vial-dose { color:#93eff0; border-color:#457883; font-size:11px; font-weight:650; margin-top:5px; }
+.vial-dose.long-dose { font-size:8px; }
+.promo-vials .vial-brand { font-size:10px; }
+.promo-vials .vial-dose { font-size:10px; }
+.product-included,.catalog-only { color:#a9c5d2!important; border-color:var(--nyx-line)!important; }
+.product .stock.ok { color:#83ddbd; }
+.product .stock.out { color:#f4a8b8; }
+.shop-secondary,.nut-secondary,.gw-secondary,.gift-secondary,.page-back,.admin-fab,.quantity-control button,.product .coa-button { background:var(--nyx-secondary); border-color:var(--nyx-line-strong); color:#c7e5ec; box-shadow:none; }
+.add-to-cart:disabled { background:#1b2c36; color:#8ca3b0; border-color:#334751; }
+input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea { background-color:#0b1b26; color:#eaf4fc; border-color:#355160; border-radius:10px; }
+input::placeholder,textarea::placeholder { color:#91a6b4; opacity:1; }
+.codebox,.conversion-result,.payment-guide,.payment-help-status,.coa-meta,.encyclopedia-viewer-toolbar { background:#0e2532; border-color:#355765; }
+.codebox strong,.grand-total strong,.checkout-line strong,.nut-metric strong,.amb-stat strong { color:#8be9f0; }
+.calculator-segments button[aria-pressed=true],.journal-day.selected,.nut-source-tabs button[aria-pressed=true] { background:var(--nyx-primary); color:#04212a; border-color:#70d8e7; }
+.journal-day[aria-current=date] { border-color:#67ddeb; }
+nav { width:min(780px,100%); background:#091720f5; border-color:#305361; border-radius:20px 20px 0 0; box-shadow:0 -8px 30px #0007; }
+nav button { color:#94aebe; border-radius:12px; }
+nav button.active { background:#70ece010; color:#70ece0; border-color:#70ece035; box-shadow:none; }
+nav button.active:before { background:#70ece0; }
+nav button.active[data-go=home] svg { fill:none; }
+nav span { font-weight:600; }
+#cartCount { background:#70ece0; color:#04212a; }
+#toast { background:#15303d; border-color:#517a88; color:#eaf4fc; }
+@media(min-width:600px) { .tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } .tiles button { min-height:140px; } .filters.category-menu { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:350px) { .welcome>div:first-child { max-width:62%; } .welcome h1 { font-size:23px; } .welcome .brand-word { font-size:20px; } .category-menu b { font-size:12px; } .category-menu-icon { width:20px; } .category-menu-icon svg { width:20px; } .tiles { gap:8px; } .tiles button { padding:14px 10px; } }
+@media(hover:hover) { .tiles button:hover,.category-menu button:hover,.product:hover { border-color:#568a99; } }
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+
+/* Final palette and composition matched to the chosen Neo Biotech references. */
+:root { --nyx-ice:#92c8ff; --nyx-line:#233d59; --nyx-line-strong:#355979; --nyx-panel:linear-gradient(135deg,#0b1928ed,#030c14f7); --nyx-primary:linear-gradient(120deg,#b6dbff,#78baff); --nyx-secondary:linear-gradient(145deg,#12253b,#071521); --nyx-soft:#abc2df; --nyx-muted:#94aecd; --blue:#92c8ff; --muted:#94aecd; --edge:#233d59; }
+body { background:#020810; }
+.bg { background:radial-gradient(ellipse at 75% 0,#06386d36,transparent 65%),#020810; }
+.bg:before { content:''; position:absolute; inset:-12px; background:url('/static/neo-dna.webp') right top/auto min(950px,110vh) no-repeat; opacity:.68; pointer-events:none; animation:neoDnaDrift 24s ease-in-out infinite alternate; }
+.bg.is-paused:before { animation-play-state:paused; }
+@keyframes neoDnaDrift { from { transform:translate3d(0,-6px,0) rotate(-1deg); } to { transform:translate3d(-8px,8px,0) rotate(1deg); } }
+.bg .dna-scene { opacity:.14!important; }
+.sapphire-veils { opacity:.1; }
+.neo-masthead { display:flex; align-items:center; justify-content:space-between; min-height:56px; margin-bottom:12px; }
+.neo-masthead .premium-brand { display:flex; align-items:center; gap:8px; position:static; height:auto; }
+.neo-masthead .brand-word { font:700 26px system-ui,sans-serif; letter-spacing:-1px; color:#eaf4ff; background:linear-gradient(100deg,#fff 25%,#90beff); background-clip:text; -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.neo-masthead .brand-moon { display:block; position:static; width:30px!important; height:38px!important; }
+.neo-masthead .brand-moon svg { width:100%; height:100%; filter:drop-shadow(0 0 8px #297fff88); }
+.neo-masthead>button { min-width:44px; border:1px solid #284563; border-radius:12px; color:#abcfff; background:#081627a6; display:grid; place-items:center; }
+.hero-zone { margin-top:0; }
+.welcome { min-height:112px; padding-top:16px; padding-bottom:22px; }
+.welcome>div:first-child { max-width:90%; }
+.welcome h1 span { color:#eaf4ff; }
+.welcome p { color:#adc8ec; }
+.card,.product,.news article,.tiles button { border-color:#28415c; }
+.promo-carousel { border-color:#385d82; box-shadow:0 0 18px #147dff12; }
+.promo-slide { background:radial-gradient(ellipse at 95% 45%,#0756bd38,transparent 65%),linear-gradient(120deg,#081828,#020b14); }
+.promo-copy small { color:#a5d1ff; }
+.promo-copy strong,.product>strong,.loyal strong,.codebox strong,.grand-total strong,.checkout-line strong { color:#edf6ff; }
+.promo-copy button,.shop-primary,.add-to-cart,.nut-primary,.gw-primary,.gift-primary,.form>button,.codebox button,.admin-form>button { color:#061c39; border-color:#9ed1ff; box-shadow:0 0 14px #2788ff22,inset 0 1px 0 #fff5; border-radius:20px; }
+.promo-dots button.active:before { background:#88caff; }
+.nutrition-shortcut>i,.giveaway-shortcut>span:first-child { color:#8dc8ff; background:#599dff10; border-color:#284563; }
+.loyal .star { border-color:#3b6d95; background:#629dff0c; }
+.star svg,.tiles i,.rank header i,.section-title button,.rank header button,.loyal em,.journal-refresh,.gift-link,.gw-link { color:#84c4ff; }
+.tiles button:first-child { border-color:#4586b6; background:linear-gradient(135deg,#133251,#071523); }
+.catalog-head { background:none; min-height:115px; margin-top:0; padding-top:14px; }
+.catalog-head:after,.catalog-brand,.trust { display:none; }
+.catalog-head h1 { font-size:32px; }
+.catalog-head p { color:#a8c6ef; font-size:14px; }
+.filters.category-menu button { border-color:#2d4968; background:linear-gradient(135deg,#0d1e32ed,#030c16f7); min-height:94px; }
+.category-menu b { color:#edf3ff; }
+.category-menu small { color:#a0bde3; }
+.category-menu em { color:#9bbde8; }
+.category-menu-icon { color:#55ccf7; }
+[data-cat="Beauté · peau"] .category-menu-icon { color:#d98ee8; }
+[data-cat="Nootropiques"] .category-menu-icon { color:#f48bac; }
+[data-cat="Libido"] .category-menu-icon { color:#ff8a9f; }
+[data-cat="Accessoires"] .category-menu-icon { color:#bf8bef; }
+[data-cat="Packs & promos"] .category-menu-icon { color:#f5cf8b; }
+.product .branded-photo { background:radial-gradient(ellipse at 50% 65%,#175fff1f,transparent 70%); }
+.branded-vial>img,.product .branded-vial>img,.promo-vials .branded-vial>img,.protocol-vial .branded-vial>img { filter:none; }
+.vial-print { background:transparent; color:#101926; border:0; border-radius:0; padding:0; }
+.vial-brand { color:#101926; font:700 13px Arial,sans-serif; letter-spacing:-.9px; }
+.vial-rule,.vial-bottom-rule { background:#1c283b; }
+.vial-name { font-size:9px; color:#101926; }
+.vial-dose { color:#101926; border-color:#243c5d; font-size:12px; background:#edf4ff; }
+.product-included,.catalog-only { color:#a3bbd7!important; border-color:#253f5a!important; }
+input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea { background-color:#071525; border-color:#2f4968; }
+.shop-secondary,.nut-secondary,.gw-secondary,.gift-secondary,.page-back,.admin-fab,.quantity-control button,.product .coa-button { color:#bad8fa; border-color:#315375; }
+nav { background:#030d17f5; border-color:#345578; }
+nav button.active { color:#a1d6ff; border-color:#4b8ac638; background:radial-gradient(ellipse at center,#175ba444,#071526); }
+nav button.active:before { background:#8ecfff; }
+#cartCount { background:#9ed1ff; color:#061c39; }
+@media(min-width:600px) { .neo-masthead .brand-word { font-size:30px; } }
+.hero-zone .loyal { margin:0 0 16px; }
+.neo-catalog-offer { position:relative; display:flex; align-items:center; min-height:190px; overflow:hidden; padding:20px 16px; border:1px solid #345c81; border-radius:18px; background:radial-gradient(ellipse at 85% 45%,#136dca33,transparent 65%),#05111e; margin-bottom:20px; }
+.neo-offer-copy { width:64%; position:relative; z-index:2; }
+.neo-offer-copy small { font-size:10px; letter-spacing:1px; color:#a9d9ff; }
+.neo-offer-copy h2 { font-size:20px; line-height:1.2; margin:8px 0; }
+.neo-offer-copy p { font-size:12px; line-height:1.4; color:#b5c9e4; margin:0; }
+.neo-offer-copy strong { display:block; font-size:25px; margin:8px 0; }
+.neo-offer-copy button { background:var(--nyx-primary); color:#061c39; border:1px solid #9ed1ff; border-radius:22px; padding:9px 15px; font-weight:700; }
+.neo-offer-visual { position:absolute; right:0; top:0; bottom:0; width:42%; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.neo-offer-visual .pack-vials { width:100%; }
+.catalog-extra .filters.category-menu { margin-top:0; grid-template-columns:1fr; padding-bottom:4px; }
+.catalog-extra .category-menu button { min-height:64px; }
+.neo-masthead .brand-word { text-shadow:none; filter:none; }
+@media(min-width:800px) { .bg:before { left:calc(50% - 390px); right:calc(50% - 390px); } }
