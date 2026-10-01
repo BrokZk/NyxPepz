@@ -139,6 +139,21 @@ def install_ambassadors(app,db,User,Order,Confirmed,current_user,require_admin):
   db.session.add(AmbassadorCommission(order_id=order.id,ambassador_id=amb.id,basis_cents=basis,
    amount_cents=(basis+5)//10,first_order=is_first,status=state,created_at=now()))
 
+ @app.get('/api/ambassador/choices')
+ def checkout_choices():
+  # Read-only checkout directory; commission and attribution rules stay in prepare().
+  user=current_user()
+  if not user:return fail('Ouvrez l’application depuis Telegram.',401)
+  attribution=db.session.get(AmbassadorAttribution,user.id)
+  if attribution:
+   ambassador=find(attribution.ambassador_id)
+   choices=[dict(name=ambassador.name,code=ambassador.code)] if ambassador and ambassador.active else []
+   return jsonify(ambassadors=choices,locked=True,notice='Votre compte est déjà rattaché à un ambassadeur.' if choices else 'Votre rattachement existant est conservé. Aucun nouveau code ne peut être choisi.')
+  if Confirmed.query.filter_by(user_id=user.id).first():
+   return jsonify(ambassadors=[],locked=True,notice='Le choix d’un ambassadeur est réservé au premier achat payé.')
+  choices=Ambassador.query.filter(Ambassador.active.is_(True),Ambassador.user_id!=user.id).order_by(Ambassador.name,Ambassador.code).all()
+  return jsonify(ambassadors=[dict(name=ambassador.name,code=ambassador.code) for ambassador in choices],locked=False,notice='Ce choix est facultatif et ne change pas le prix.')
+
  @app.get('/api/ambassador/access')
  def access():
   if not current_user():return fail('Ouvrez l’application depuis Telegram.',401)
