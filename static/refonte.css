@@ -80,3 +80,9 @@ body:has(#loyalty.active) nav button[data-go="profile"],body:has(#orders.active)
 
 
 .nyx-ambassador-picker{padding:17px;margin:15px 0}.nyx-ambassador-picker label{display:flex;flex-direction:column;gap:10px;font-size:14px;font-weight:650;color:#eaf5ff}.nyx-ambassador-picker select{display:block;width:100%;min-height:47px;border:1px solid #3b638a;border-radius:12px;padding:10px 12px;background:#071a2e;color:#c8e5ff;font-size:14px}.nyx-ambassador-picker small{font-size:11px;font-weight:400;color:#a8c4e5;line-height:1.5}.nyx-ambassador-picker:has(label[hidden]){display:none}.admin-people-shortcut{background:linear-gradient(140deg,#0b2037,#04101e);border-color:#2b5078;border-radius:17px;box-shadow:inset 0 1px 0 #bddfff08}.admin-people-shortcut>span:first-child{color:#8fc9ff;background:#0d2849;border-color:#39658f}.ad-summary-grid button{background:linear-gradient(140deg,#0c2240,#06101f);border-color:#2d537d;border-radius:15px}.ad-summary-grid strong{color:#c8e9ff}
+
+/* Continuous original-image animation, with projected molecular atmosphere. */
+.bg .nyx-living-scene{position:absolute;top:0;left:50%;transform:translateX(-50%);width:min(100%,1000px);height:100%;pointer-events:none;z-index:1}
+.bg:before{animation:none!important;transform:none!important}
+.bg.nyx-living-ready:before{opacity:0!important}
+.bg .sapphire-veils{pointer-events:none}
