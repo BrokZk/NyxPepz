@@ -555,6 +555,8 @@ from gifts import install_gifts
 gifts = install_gifts(app, db, User, Product, shop, current_user, require_admin)
 from sales import install_sales
 install_sales(app, db, shop, ConfirmedOrderEvent, gifts, require_admin)
+from real_sales import install_real_sales, create_schema
+install_real_sales(app, db, shop, ConfirmedOrderEvent, gifts, require_admin)
 from leaderboard import install_leaderboard
 install_leaderboard(app, db, User, ConfirmedOrderEvent, shop, gifts, current_user)
 from giveaways import install_giveaways
@@ -569,7 +571,7 @@ from shop_inventory import install_inventory
 install_inventory(app, db, Product, CatalogUpdate, shop)
 
 with app.app_context():
- db.create_all()
+ create_schema(db)
  # Lightweight migration for existing PostgreSQL database.
  try:
   cols={c["name"] for c in inspect(db.engine).get_columns("product")}
