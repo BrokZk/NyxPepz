@@ -650,6 +650,10 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             shares = {k.lower(): Decimal(str(v)) for k, v in shares.items()}
             if not value.is_finite() or value <= 0 or not forwarded.is_finite() or forwarded <= 0:
                 raise ValueError()
+            if value >= Decimal('1e18') or forwarded > value or value.as_tuple().exponent < -12 or forwarded.as_tuple().exponent < -12:
+                raise ValueError()
+            if any(not s.is_finite() or s <= 0 or s > 1 for s in shares.values()) or sum(shares.values()) > 1:
+                raise ValueError()
             share = shares.get(order.payout_wallet)
             if share is None or not share.is_finite() or not 0 < share <= 1:
                 raise ValueError()
@@ -668,6 +672,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             db.session.refresh(order)
             db.session.add(ShopPayment(order_id=order.id, transaction_id=txid, coin=coin,
                 amount=str(value), forwarded_amount=str(forwarded * share), received_at=int(time.time())))
+            app.extensions['nyx_accounting']['receipt'](order, request.args)
             if order.status not in ("paid", "shipped", "available", "delivered"):
                 order.status = "payment_review"
             db.session.flush()
@@ -911,6 +916,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             order.payment_note = note
             add_payment_record(order, method, note, admin, "admin_confirmation", previous)
             credit_order(order)
+            app.extensions['nyx_accounting']['confirmed'](order, method)
             enqueue(order, "paid")
             db.session.commit()
             return jsonify(order=serialize(order, True))
@@ -956,6 +962,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 db.session.commit()
                 return jsonify(order=serialize(order, True), duplicate=True)
             add_payment_record(order, method, note, admin, "admin_correction", previous)
+            app.extensions['nyx_accounting']['invalidate'](order)
             # Keep the original confirmation note/proofs, accounting date, stock,
             # rewards and notification outbox unchanged by this metadata correction.
             db.session.commit()
@@ -1026,6 +1033,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
         "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation, "PaymentRecord": ShopPaymentRecord,
+        "payment_record": payment_record,
         "PrivateNote": ShopPrivateNote,
         "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
