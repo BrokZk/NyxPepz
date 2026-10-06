@@ -180,6 +180,10 @@
  root.querySelectorAll('[data-au-delta]').forEach(b=>b.onclick=()=>adjust(Number(b.dataset.auDelta)));
  get('auRefreshUser').onclick=()=>{if(!busy&&selectedId)openUser(selectedId,{refresh:true});};
  get('auDeleteUser').onclick=removeUser;
+ window.addEventListener('admin-open-client',event=>{
+  if(!me.is_admin||busy||!Number.isInteger(event.detail))return;
+  go('adminPeople');openUser(event.detail);
+ });
  const originalGo=go;go=function(id){
   if(id==='adminPeople'&&!me.is_admin){toast('Accès réservé à l’administration');return;}
   if(active()&&id!=='adminPeople'){cancelList();cancelDetail();dirty=true;}

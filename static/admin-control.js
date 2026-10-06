@@ -22,13 +22,54 @@
  dash.append(filters,status,metrics,notes,stock);let period='today';
  [['today','Aujourd’hui'],['7d','7 jours'],['30d','30 jours'],['all','Tout']].forEach(([value,label])=>filters.append(button(label,()=>{period=value;loadDashboard();})));
  filters.append(button('Actualiser',loadDashboard));
+ const details=node('section',undefined,'control-details');details.id='dashboardDetails';details.hidden=true;details.setAttribute('aria-label','Détail du Dashboard');dash.insertBefore(details,notes);
+ let detailSeq=0,detailTrigger=null;
+ const money=v=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(v/100);
+ function closeDetails(){detailSeq++;details.hidden=true;detailTrigger?.scrollIntoView({block:'center'});detailTrigger?.focus({preventScroll:true});}
+ async function showDetails(metric,label,page=1,trigger=null){
+  if(!me.is_admin)return;if(trigger)detailTrigger=trigger;
+  const seq=++detailSeq;details.hidden=false;details.replaceChildren(button('‹ Retour au Dashboard',closeDetails));
+  const title=node('h3',label);title.tabIndex=-1;const message=node('p','Chargement…','admin-note');message.setAttribute('role','status');details.append(title,message);
+  details.scrollIntoView({block:'start'});title.focus({preventScroll:true});
+  if(metric==='fees'||metric==='net'){message.textContent='Indisponible : les frais et règlements nets en euros ne sont pas vérifiés. Les montants crypto ne permettent pas de calculer un net fiable.';return;}
+  try{
+   const data=await api('/api/admin/dashboard/details?'+new URLSearchParams({metric,period,page}));if(seq!==detailSeq)return;
+   message.textContent=data.scope+' · '+data.total+' résultat(s)';
+   if(!data.items.length)details.append(node('p','Aucun résultat pour ce filtre.','admin-note'));
+   data.items.forEach(item=>{
+    const row=node('article',undefined,'card control-detail-row');
+    row.append(node('b',item.name));if(item.username)row.append(node('p','@'+item.username));
+    if(data.kind==='orders'){
+     row.append(node('p',item.reference+' · '+item.status_label),node('p',money(item.total_cents)+' · '+new Date(item.created_at*1000).toLocaleString('fr-FR',{timeZone:'Europe/Paris'})),button('Ouvrir la commande',()=>window.dispatchEvent(new CustomEvent('admin-open-order',{detail:item.reference}))));
+    }else if(data.kind==='clients'){
+     row.append(node('p','Telegram : '+item.telegram_id+' · '+item.points+' points'));
+     if(item.created_at){const raw=item.created_at;row.append(node('p','Inscrit le '+new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(raw)?raw:raw+'Z').toLocaleString('fr-FR',{timeZone:'Europe/Paris'})));}
+     row.append(button('Ouvrir le client',()=>window.dispatchEvent(new CustomEvent('admin-open-client',{detail:item.id}))));
+    }else{
+     row.append(node('p',item.format+' · '+item.stock+' en stock'),button('Gérer le stock',async()=>{
+      try{adminProductItems=await api('/api/admin/products');select('Boutique');adminProductCategory=null;document.getElementById('adminProductSearch').value=item.name;renderAdminProducts();const target=document.querySelector('[data-admin-product-id="'+item.id+'"]');target?.scrollIntoView({block:'start'});target?.querySelector('.admin-stock-open')?.click();}catch(e){toast(e.message);}
+     }));
+    }
+    details.append(row);
+   });
+   const pagination=node('div',undefined,'control-nav');
+   const previous=button('‹ Précédent',()=>showDetails(metric,label,data.page-1)),next=button('Suivant ›',()=>showDetails(metric,label,data.page+1));previous.disabled=data.page<=1;next.disabled=data.page>=data.pages;
+   pagination.append(previous,node('span','Page '+data.page+' / '+data.pages),next);details.append(pagination);
+  }catch(e){if(seq!==detailSeq)return;message.textContent=e.message;details.append(button('Réessayer',()=>showDetails(metric,label,page)));}
+ }
  async function loadDashboard(){
-  if(!me.is_admin)return;const seq=++dashboardSeq;status.textContent='Chargement…';metrics.replaceChildren();notes.replaceChildren();stock.replaceChildren();
+  if(!me.is_admin)return;detailSeq++;details.hidden=true;const seq=++dashboardSeq;status.textContent='Chargement…';metrics.replaceChildren();notes.replaceChildren();stock.replaceChildren();
   [...filters.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(['today','7d','30d','all'][i]===period)));
   try{const d=await api('/api/admin/dashboard?period='+period);if(seq!==dashboardSeq)return;
    const eur=v=>new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(v/100);
-   const cards=[['CA brut confirmé',eur(d.gross_cents)],['Frais','Indisponibles'],['CA net','Net indisponible'],['Commandes aujourd’hui',d.orders_today],['Commandes sur la période',d.orders_in_period],['À préparer',d.preparing],['Clients inscrits',d.clients],['Nouveaux clients sur la période',d.clients_in_period],['Paiements à vérifier',d.payment_review],['Stocks faibles',d.low_stock.length],['Colis sans suivi',d.missing_tracking]];
-   cards.forEach(([label,value])=>{const c=node('article',undefined,'card');c.append(node('small',label),node('strong',String(value)));metrics.append(c);});
+   const cards=[['CA brut confirmé',eur(d.gross_cents),'gross'],['Frais','Indisponibles','fees'],['CA net','Net indisponible','net'],['Commandes aujourd’hui',d.orders_today,'orders_today'],['Commandes sur la période',d.orders_in_period,'orders_in_period'],['À préparer',d.preparing,'preparing'],['Clients inscrits',d.clients,'clients'],['Nouveaux clients sur la période',d.clients_in_period,'clients_in_period'],['Paiements à vérifier',d.payment_review,'payment_review'],['Stocks faibles',d.low_stock.length,'low_stock'],['Colis sans suivi',d.missing_tracking,'missing_tracking']];
+   cards.forEach(([label,value,metric])=>{
+    const c=node('button',undefined,'card control-metric-action');c.dataset.metric=metric;
+    c.append(node('small',label),node('strong',String(value)));
+    const link=metric==='fees'||metric==='net'?'Pourquoi indisponible ?':'Voir le détail ›';
+    c.type='button';c.onclick=()=>showDetails(metric,label,1,c);c.setAttribute('aria-label',label+' : '+value+' — '+link);c.setAttribute('aria-controls','dashboardDetails');c.append(node('span',link,'control-metric-link'));
+    metrics.append(c);
+   });
    notes.append(node('p',d.financial_notice,'admin-note'),node('p',d.scope_notice,'admin-note'));
    if(d.history_notice)notes.append(node('p',d.history_notice+' '+d.undated_orders+' commande(s) ; exclues des périodes datées, incluses dans Tout.','control-warning'));
    notes.append(node('h3','Ventilation du CA brut'));

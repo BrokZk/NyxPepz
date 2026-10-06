@@ -309,6 +309,10 @@
   if(get('admin').classList.contains('active')&&id!=='admin'){cancelSummary();get('adSummaryCounts').hidden=true;}
   previousGo(id);if(id==='adminOrders')showList();if(id==='admin')loadSummary();
  };
+ window.addEventListener('admin-open-order',event=>{
+  if(!me.is_admin||busy||typeof event.detail!=='string')return;
+  go('adminOrders');openDetail(event.detail);
+ });
  const previousBack=goBack;goBack=function(){if(active()&&!get('aoDetail').hidden){showList({restore:true});return;}previousBack();};root.querySelector('.page-back').onclick=()=>goBack();
 })();
 
