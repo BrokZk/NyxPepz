@@ -111,3 +111,55 @@ class AdminControlTests(ShopTests):
   self.assertEqual(start.hour,22);self.assertEqual(end,now)
   today,_=bounds('today',now);self.assertEqual(today.hour,23)
   self.assertEqual(bounds('all',now),(None,None))
+
+ def test_dashboard_details_auth_validation_and_pagination(self):
+  self.assertEqual(self.client.get('/api/admin/dashboard/details?metric=clients').status_code,403)
+  self.login(1)
+  for params in ('metric=nope','metric=clients&period=nope','metric=clients&page=0','metric=clients&page=abc'):
+   self.assertEqual(self.client.get('/api/admin/dashboard/details?'+params).status_code,400)
+  for i in range(22):
+   m.db.session.add(m.User(telegram_id=2000+i,referral_code=f'D{i:04}',first_name=f'Client {i}'))
+  m.db.session.commit()
+  first=self.client.get('/api/admin/dashboard/details?metric=clients').json
+  second=self.client.get('/api/admin/dashboard/details?metric=clients&page=2').json
+  self.assertEqual(first['total'],25);self.assertEqual(len(first['items']),20)
+  self.assertEqual(len(second['items']),5)
+  self.assertFalse({u['id'] for u in first['items']} & {u['id'] for u in second['items']})
+  response=self.client.get('/api/admin/dashboard/details?metric=clients&page=999')
+  self.assertEqual(response.json['page'],2);self.assertEqual(response.headers['Cache-Control'],'no-store')
+
+ def test_dashboard_details_match_every_counter(self):
+  refs=[self.create() for _ in range(3)]
+  self.order(refs[0]).status='paid'
+  self.order(refs[1]).status='payment_review'
+  self.order(refs[2]).status='shipped';self.order(refs[2]).tracking_number=' '
+  m.db.session.get(m.Product,1).stock=3
+  m.db.session.commit();self.login(1)
+  mapping={'orders_today':'orders_today','orders_in_period':'orders_in_period','preparing':'preparing',
+           'clients':'clients','clients_in_period':'clients_in_period','payment_review':'payment_review','missing_tracking':'missing_tracking','gross':'paid_orders'}
+  for period in ('today','7d','30d','all'):
+   counters=self.client.get('/api/admin/dashboard?period='+period).json
+   for metric,counter in mapping.items():
+    response=self.client.get(f'/api/admin/dashboard/details?metric={metric}&period={period}')
+    self.assertEqual(response.status_code,200,response.json)
+    self.assertEqual(response.json['total'],counters[counter],(period,metric))
+   self.assertEqual(self.client.get(f'/api/admin/dashboard/details?metric=low_stock&period={period}').json['total'],len(counters['low_stock']))
+  paid=self.client.get('/api/admin/dashboard/details?metric=gross&period=all').json
+  self.assertEqual(sum(row['total_cents'] for row in paid['items']),17000)
+  self.assertTrue(all(row['name']=='Alice Test' for row in paid['items']))
+
+ def test_details_periods_filter_dates_not_alerts(self):
+  ref=self.create();order=self.order(ref)
+  order.created_at=int((datetime.now(timezone.utc)-timedelta(days=10)).timestamp())
+  order.status='paid'
+  m.db.session.add(m.ConfirmedOrderEvent(external_order_id=ref,user_id=2,loyalty_points=80,
+                                      processed_at=datetime.now(timezone.utc)-timedelta(days=10)))
+  user=m.db.session.get(m.User,2);user.created_at=datetime.now(timezone.utc)-timedelta(days=10)
+  m.db.session.commit();self.login(1)
+  for metric in ('orders_today','orders_in_period','gross'):
+   self.assertEqual(self.client.get(f'/api/admin/dashboard/details?metric={metric}&period=7d').json['total'],0)
+  for metric in ('orders_in_period','gross'):
+   self.assertEqual(self.client.get(f'/api/admin/dashboard/details?metric={metric}&period=30d').json['total'],1)
+  self.assertEqual(self.client.get('/api/admin/dashboard/details?metric=preparing&period=today').json['total'],1)
+  self.assertEqual(self.client.get('/api/admin/dashboard/details?metric=clients_in_period&period=7d').json['total'],2)
+  self.assertEqual(self.client.get('/api/admin/dashboard/details?metric=clients_in_period&period=30d').json['total'],3)
