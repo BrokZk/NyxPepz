@@ -32,7 +32,7 @@
   }
   const back=button('‹ Toutes les catégories','shop-secondary',()=>{selected='';search.value='';render();});
   const cat=data.categories.find(cat=>cat.id===selected);
-  const shown=data.entries.filter(entry=>(!selected||entry.category===selected)&&tokens.every(token=>normalize([entry.title,entry.reference,entry.aliases].join(' ')).includes(token)));
+  const shown=data.entries.filter(entry=>(!selected||entry.category===selected)&&tokens.every(token=>normalize([entry.title,entry.reference,entry.aliases,entry.description].join(' ')).includes(token)));
   const head=el('div','protocol-list-head');head.append(back,el('h2','',cat?cat.label:'Résultats de recherche'),el('p','protocol-note',shown.length+' fiche'+(shown.length!==1?'s':'')));list.append(head);
   if(!shown.length){list.append(el('p','card pad','Aucune fiche trouvée. Essayez un autre nom ou revenez à toutes les catégories.'));return;}
   const grid=el('div','protocol-products');
@@ -40,8 +40,8 @@
    const card=button('','protocol-product card',()=>open(entry,card));card.dataset.protocol=entry.id;
    const glyph=el('span','protocol-vial');glyph.setAttribute('aria-hidden','true');
    const parts=entry.title.match(/^(.*?)\s+(\d+(?:[.,]\d+)?(?:\+\d+(?:[.,]\d+)?)?\s*mg)$/i);
-   glyph.innerHTML=vial({name:parts?parts[1]:entry.title,format:parts?parts[2]:''});
-   const text=el('span','protocol-product-copy');text.append(el('strong','',entry.title),el('small','','Réf. '+entry.reference),el('span','protocol-read','Consulter la fiche ›'));card.append(glyph,text);grid.append(card);
+   glyph.innerHTML=vial({name:parts?parts[1]:entry.title,format:parts?parts[2]:'',image_url:entry.image_url});
+   const text=el('span','protocol-product-copy');text.append(el('strong','',entry.title),el('small','',(entry.reference?'Réf. '+entry.reference:'Fiche informative')),el('span','protocol-read','Consulter la fiche ›'));card.append(glyph,text);grid.append(card);
   });list.append(grid);
  }
  function open(entry,trigger){
@@ -49,23 +49,27 @@
   const back=button('‹ Retour aux produits','shop-secondary',()=>{detail.hidden=true;browse.hidden=false;window.scrollTo(0,previousScroll);opener?.focus({preventScroll:true});});
   const cat=data.categories.find(cat=>cat.id===entry.category),sources=data.sources.filter(source=>entry.sourceIds?entry.sourceIds.includes(source.id):source.page!==undefined&&source.page===entry.sourcePage);
   const title=el('h2','protocol-title',entry.title);title.tabIndex=-1;
-  detail.append(back,el('p','eyebrow protocol-category',cat?.fullLabel||''),title,el('p','protocol-note','Réf. '+entry.reference+' · '+(entry.sourceLabel||sources[0]?.title||'Document NyxPepz')));
+  detail.append(back,el('p','eyebrow protocol-category',cat?.fullLabel||''),title,el('p','protocol-note',(entry.reference?'Réf. '+entry.reference:'Fiche informative')+' · '+(entry.sourceLabel||sources[0]?.title||'Document NyxPepz')));
   const notice=el('div','protocol-source-note');notice.append(el('b','','Récapitulatif du document fourni'),el('p','',entry.notice||'Transcription du guide NyxPepz, sans validation médicale. Ce résumé ne remplace pas un avis médical personnalisé ni la fiche complète du produit, non fournie ici.'));detail.append(notice);
-  const blocks=[['01','Flacon → mélange',entry.mix+(entry.concentration?'\n'+entry.concentration:'')],['02','Dose de départ',entry.start],['03','Ensuite',entry.then],['04','Rythme & moment',entry.rhythm]];
-  blocks.forEach(([number,label,text],index)=>{const card=el('article','card protocol-block');const heading=el('h3');heading.append(el('span','protocol-step',number),document.createTextNode(entry.blockLabels?.[index]||label));card.append(heading,el('p','',text));detail.append(card);});
-  detail.append(el('p','protocol-note','Notation du document : U = unités sur une seringue U-100 (100 U = 1 mL).'));
+  if(entry.image_url){const photo=el('img','protocol-editorial-image');photo.src=entry.image_url;photo.alt=entry.title;detail.append(photo);}
+  if(entry.description)detail.append(el('p','protocol-editorial-text',entry.description));
+  if(entry.content)detail.append(el('p','protocol-editorial-text',entry.content));
+  const blocks=entry.steps?.length?entry.steps.map((step,i)=>[String(i+1).padStart(2,'0'),step.title,step.text]):entry.mix!==undefined?[['01','Flacon → mélange',entry.mix+(entry.concentration?'\n'+entry.concentration:'')],['02','Dose de départ',entry.start],['03','Ensuite',entry.then],['04','Rythme & moment',entry.rhythm]]:[];
+  blocks.forEach(([number,label,text],index)=>{const card=el('article','card protocol-block');const heading=el('h3');heading.append(el('span','protocol-step',number),document.createTextNode((entry.steps?.length?label:entry.blockLabels?.[index]||label)));card.append(heading,el('p','',text));detail.append(card);});
+  if(entry.reference)detail.append(el('p','protocol-note','Notation du document : U = unités sur une seringue U-100 (100 U = 1 mL).'));
   const footnote=el('details','protocol-footnote');footnote.append(el('summary','','Notes du document fourni'));
-  (entry.notes||['Les « max » de ce tableau sont des limites, pas des objectifs. La plupart des gens trouvent leur équilibre à la dose cible, et n’ont aucun intérêt à viser le maximum.']).forEach(note=>{const paragraph=el('p','',note);paragraph.style.whiteSpace='pre-line';footnote.append(paragraph);});detail.append(footnote);
+  (entry.notes||(entry.reference?['Les « max » de ce tableau sont des limites, pas des objectifs. La plupart des gens trouvent leur équilibre à la dose cible, et n’ont aucun intérêt à viser le maximum.']:[])).forEach(note=>{const paragraph=el('p','',note);paragraph.style.whiteSpace='pre-line';footnote.append(paragraph);});detail.append(footnote);
   sources.forEach(source=>detail.append(button(source.page?'Voir le tableau original · page '+source.page:'Voir l’original : '+source.title,'shop-secondary protocol-original',()=>showSource(source))));
   window.scrollTo(0,root.offsetTop);title.focus({preventScroll:true});
  }
  search.addEventListener('input',render);
  function load(){
   list.textContent='Chargement des fiches…';
-  fetch('/static/protocols.json?v=11.11').then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
+  fetch('/api/protocols',{cache:'no-store'}).then(response=>{if(!response.ok)throw Error('load');return response.json();}).then(result=>{
    if(!Array.isArray(result.categories)||!Array.isArray(result.entries)||!Array.isArray(result.sources))throw Error('format');
    data=result;render();
   }).catch(()=>{list.replaceChildren(el('p','protocol-note','Les fiches n’ont pas pu être chargées.'),button('Réessayer','shop-secondary',load));});
  }
  load();
+ window.addEventListener('protocols-updated',load);
 })();
