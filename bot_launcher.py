@@ -49,7 +49,12 @@ def install_launcher(app, db):
         if row is None:
             row = TelegramMenuGuard(key=key, next_allowed=0, last_update_id=-1)
             db.session.add(row)
-        if update_id <= row.last_update_id or now < row.next_allowed:
+        if update_id <= row.last_update_id:
+            app.logger.warning('Menu Telegram : commande déjà traitée (%s)', chat.get('type'))
+            return False
+        if now < row.next_allowed:
+            app.logger.warning('Menu Telegram : accueil limité (%s), réessayer dans %s secondes',
+                               chat.get('type'), row.next_allowed - now)
             return False
         row.last_update_id = update_id
         row.next_allowed = now + (300 if chat.get('type') in ('group', 'supergroup') else 30)
@@ -82,6 +87,7 @@ def install_launcher(app, db):
                     seconds = 60
                 raise TelegramRetryAfter(seconds)
             if response.status_code == 403 and method in ('sendMessage', 'editMessageReplyMarkup'):
+                app.logger.warning('Menu Telegram : envoi refusé (403), vérifier blocage ou droits du bot dans la conversation')
                 return None
             if response.status_code == 400:
                 description = response.json().get('description', '').lower()
@@ -92,6 +98,7 @@ def install_launcher(app, db):
                     # update queue and private starts for everybody else.
                     if any(reason in description for reason in ('topic_closed', 'message thread not found',
                             'not enough rights to send', 'have no rights to send', 'chat_write_forbidden')):
+                        app.logger.warning('Menu Telegram : envoi au groupe refusé (400), sujet fermé/introuvable ou droits insuffisants')
                         return None
                 if method == 'editMessageReplyMarkup' and 'message is not modified' in description:
                     return None
@@ -141,8 +148,10 @@ def install_launcher(app, db):
                          'commands': [{'command': 'start', 'description': 'Ouvrir NyxPepz'}]})
                 configured = True
             state = db.session.get(TelegramLauncherState, 1)
-            updates = call('getUpdates', {'offset': state.offset, 'limit': 5, 'timeout': 0,
+            updates = call('getUpdates', {'offset': state.offset, 'limit': 100, 'timeout': 0,
                                           'allowed_updates': ['message', 'callback_query']})
+            if updates:
+                app.logger.warning('Menu Telegram : lot reçu (%s mises à jour)', len(updates))
             for event in updates:
                 # Renew ownership before another external operation.
                 owned = db.session.execute(update(TelegramLauncherState).where(
@@ -155,6 +164,9 @@ def install_launcher(app, db):
                 callback = event.get('callback_query')
                 message = event.get('message') or (callback or {}).get('message') or {}
                 chat = message.get('chat', {})
+                if is_group_start(message.get('text'), bot_username):
+                    app.logger.warning('Menu Telegram : /start reçu (%s), sujet=%s',
+                                       chat.get('type'), bool(message.get('is_topic_message')))
                 if callback:
                     call('answerCallbackQuery', {'callback_query_id': callback['id'],
                          'text': 'Retrouvez toutes les fonctionnalités dans NyxPepz.'})
@@ -180,7 +192,9 @@ def install_launcher(app, db):
                                'reply_markup': {'inline_keyboard': [[{'text': '🌙 Ouvrir NyxPepz', 'url': link}]]}}
                     if message.get('is_topic_message') and isinstance(message.get('message_thread_id'), int):
                         payload['message_thread_id'] = message['message_thread_id']
-                    call('sendMessage', payload)
+                    sent = call('sendMessage', payload)
+                    if sent is not None:
+                        app.logger.warning('Menu Telegram : accueil envoyé au groupe, ouverture directe=%s', has_main_app)
                 db.session.execute(update(TelegramLauncherState).where(TelegramLauncherState.id == 1,
                     TelegramLauncherState.owner == owner).values(offset=event['update_id'] + 1))
                 db.session.commit()
@@ -203,4 +217,5 @@ def install_launcher(app, db):
             db.session.commit()
 
     return tick
+
 
