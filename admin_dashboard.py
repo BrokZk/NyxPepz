@@ -45,7 +45,7 @@ def install_dashboard(app, db, shop, Event, gifts, User, Product, require_admin)
                 kind = 'products'
                 query = Product.query.filter(Product.active.is_(True), Product.stock <= 5).order_by(Product.stock, Product.id)
             else:
-                query = Order.query
+                query = Order.query.filter(Order.status != 'deleted')
                 if metric == 'gross':
                     query = query.outerjoin(Event, and_(Event.external_order_id == Order.reference, Event.user_id == Order.user_id))
                     query = query.filter(Order.status.in_(PAID_STATUSES), ~gifts['order_clause'](Order.id))
@@ -129,7 +129,7 @@ def install_dashboard(app, db, shop, Event, gifts, User, Product, require_admin)
                 gross += order.total_cents
                 count += 1
             today, _ = bounds('today', now)
-            created = Order.query
+            created = Order.query.filter(Order.status != 'deleted')
             if start is not None:
                 created = created.filter(Order.created_at >= int(start.timestamp()), Order.created_at <= int(now.timestamp()))
             prepared = db.session.query(Preparation.order_id).filter(Preparation.order_id == Order.id).exists()
@@ -142,7 +142,7 @@ def install_dashboard(app, db, shop, Event, gifts, User, Product, require_admin)
                 financial_notice='Net indisponible : frais et règlement net en EUR non vérifiés.',
                 undated_orders=undated, history_notice='Historique non vérifié : dates de confirmation manquantes.' if undated else None,
                 payment_split=split, orders_in_period=created.count(), clients_in_period=clients.count(), clients=User.query.count(),
-                orders_today=Order.query.filter(Order.created_at >= int(today.timestamp()), Order.created_at <= int(now.timestamp())).count(),
+                orders_today=Order.query.filter(Order.status != 'deleted', Order.created_at >= int(today.timestamp()), Order.created_at <= int(now.timestamp())).count(),
                 preparing=Order.query.filter(Order.status.in_(('paid', 'gifted')), ~prepared).count(),
                 payment_review=Order.query.filter_by(status='payment_review').count(),
                 missing_tracking=Order.query.filter(Order.status.in_(('shipped', 'available', 'delivered')),
@@ -155,3 +155,4 @@ def install_dashboard(app, db, shop, Event, gifts, User, Product, require_admin)
             db.session.rollback()
             app.logger.exception('Dashboard indisponible')
             return jsonify(error='Dashboard temporairement indisponible. Réessayez.'), 503
+

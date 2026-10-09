@@ -219,6 +219,8 @@ def install_delivery(app, db, User, shop):
                 note = None
                 if job.kind == 'sheets':
                     sheet_write(order)
+                elif order.status == 'deleted':
+                    note = 'order_deleted'
                 else:
                     note = telegram_send(order, job)
                 db.session.execute(update(Outbox).where(Outbox.id == job_id, Outbox.lease_token == token).values(
@@ -269,3 +271,4 @@ def install_delivery(app, db, User, shop):
     shop['run_jobs'] = run_jobs
     shop['sheet_write'] = sheet_write
     shop['telegram_send'] = telegram_send
+

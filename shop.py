@@ -25,7 +25,7 @@ COUNTRIES = {"FR": "France", "BE": "Belgique", "ES": "Espagne"}
 REWARDS = {150: 1000, 300: 2500, 500: 5000, 750: 8000}
 STATUSES = {"awaiting_payment": "En attente de paiement", "payment_review": "Paiement reçu — vérification",
             "paid": "Payée", "gifted": "Cadeau offert — à préparer", "shipped": "Expédiée", "available": "Disponible au point de retrait",
-            "delivered": "Livrée", "cancelled": "Annulée", "expired": "Réservation expirée"}
+            "delivered": "Livrée", "cancelled": "Annulée", "expired": "Réservation expirée", "deleted": "Supprimée"}
 PAYMENT_METHODS = {"crypto": "Crypto", "bank_transfer": "Virement bancaire", "paypal": "PayPal",
                    "cash": "Espèces", "other": "Autre"}
 PAID_STATUSES = ("paid", "shipped", "available", "delivered")
@@ -277,7 +277,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         if admin:
             owner = db.session.get(User, order.user_id)
             preparation = db.session.get(ShopPreparation, order.id)
-            data.update(contact=order.contact, telegram_id=owner.telegram_id if owner else None,
+            data.update(can_delete=can_delete_order(order), contact=order.contact, telegram_id=owner.telegram_id if owner else None,
                         username=owner.username if owner else None, payment_note=order.payment_note,
                         private_note=private_note(order), customer_notifications=customer_notifications(order, owner),
                         payment_record=payment_record(order),
@@ -530,7 +530,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return fail("Non authentifié", 401)
         try:
             expire_orders()
-            return jsonify([serialize(o) for o in ShopOrder.query.filter_by(user_id=user.id).order_by(ShopOrder.id.desc()).limit(100)])
+            return jsonify([serialize(o) for o in ShopOrder.query.filter_by(user_id=user.id).filter(ShopOrder.status != "deleted").order_by(ShopOrder.id.desc()).limit(100)])
         except SQLAlchemyError:
             return fail("Commandes momentanément indisponibles", 503)
 
@@ -775,7 +775,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return fail('Taille de page invalide')
         if not 1 <= limit <= 50:
             return fail('Taille de page invalide')
-        query = ShopOrder.query
+        query = ShopOrder.query.filter(ShopOrder.status != "deleted")
         if group is not None and group != 'all':
             try:
                 query = query.filter(order_group_filter(group))
@@ -792,6 +792,59 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return jsonify(orders=[serialize(o, True) for o in orders[:limit]],
                            next_before=orders[limit - 1].id if len(orders) > limit else None)
         return jsonify([serialize(o, True) for o in orders])
+
+    def can_delete_order(order):
+        return (order.status in ("awaiting_payment", "expired", "cancelled")
+                and not is_gift_order(order) and not order.points
+                and not ShopPayment.query.filter_by(order_id=order.id).first()
+                and not ShopPaymentRecord.query.filter_by(order_id=order.id).first()
+                and not ConfirmedOrderEvent.query.filter_by(external_order_id=order.reference).first()
+                and not ReferralOrderEvent.query.filter_by(external_order_id=order.reference).first())
+
+    @app.post("/api/shop/admin/orders/<reference>/delete")
+    def delete_admin_order(reference):
+        if not require_admin():
+            return fail("Interdit", 403)
+        try:
+            # Serialize against confirmations and callbacks without relying on
+            # SELECT FOR UPDATE, which SQLite ignores.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference).values(status=ShopOrder.status),
+                execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            if order.status == "deleted":
+                db.session.commit()
+                return jsonify(ok=True, duplicate=True)
+            if not can_delete_order(order):
+                return fail("Seules les commandes non payées peuvent être supprimées.", 409)
+            now = int(time.time())
+            if order.sync_lease_until > now or ShopOutbox.query.filter(
+                    ShopOutbox.order_id == order.id, ShopOutbox.lease_until > now).first():
+                return fail("Une synchronisation est en cours. Réessayez dans quelques instants.", 409)
+            # Retain the identity and payment nonce: a delayed signed payment
+            # must still become payment_review, never disappear with its order.
+            if order.stock_reserved:
+                for line in inventory_lines(order.lines):
+                    db.session.execute(update(Product).where(Product.id == line["product_id"]).values(
+                        stock=Product.stock + line["quantity"]))
+            if order.reward_reserved:
+                db.session.execute(update(User).where(User.id == order.user_id).values(
+                    loyalty_points=User.loyalty_points + order.reward_points))
+            order.stock_reserved = False
+            order.reward_reserved = False
+            order.status = "deleted"
+            # Cancel undelivered notifications; retain their idempotency keys.
+            ShopOutbox.query.filter(ShopOutbox.order_id == order.id,
+                ShopOutbox.state != "done").update(
+                    {"state": "done", "lease_until": 0, "lease_token": None,
+                     "last_error": "order_deleted"}, synchronize_session=False)
+            enqueue(order, "deleted", recipients=[])  # Update the existing Sheets row only.
+            db.session.commit()
+            return jsonify(ok=True)
+        except SQLAlchemyError:
+            return fail("Suppression temporairement indisponible. Réessayez.", 503)
 
     @app.get("/api/shop/admin/orders/<reference>")
     def admin_order_detail(reference):
@@ -1030,3 +1083,4 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
     return app.extensions["nyx_shop"]
+
