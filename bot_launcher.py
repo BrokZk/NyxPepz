@@ -21,12 +21,40 @@ def is_group_start(text, username):
     return bool(command and (not command.group(1) or command.group(1).lower() == username.lower()))
 
 
+class TelegramRetryAfter(RuntimeError):
+    def __init__(self, seconds):
+        super().__init__('Telegram demande une pause avant la prochaine tentative.')
+        self.seconds = seconds
+
+
 def install_launcher(app, db):
     class TelegramLauncherState(db.Model):
         id = db.Column(db.Integer, primary_key=True)
         offset = db.Column(db.BigInteger, nullable=False, default=0)
         lease_until = db.Column(db.BigInteger, nullable=False, default=0)
         owner = db.Column(db.String(64))
+
+    class TelegramMenuGuard(db.Model):
+        # Separate table: existing launcher state needs no column migration.
+        key = db.Column(db.String(160), primary_key=True)
+        next_allowed = db.Column(db.BigInteger, nullable=False, default=0)
+        last_update_id = db.Column(db.BigInteger, nullable=False, default=-1)
+
+    def reserve_reply(chat, update_id):
+        # Persist before sending: an uncertain network result must not resend the
+        # same welcome. The user can retry /start after the cooldown.
+        key = bot_username + ':' + str(chat['id'])
+        now = int(time.time())
+        row = db.session.get(TelegramMenuGuard, key)
+        if row is None:
+            row = TelegramMenuGuard(key=key, next_allowed=0, last_update_id=-1)
+            db.session.add(row)
+        if update_id <= row.last_update_id or now < row.next_allowed:
+            return False
+        row.last_update_id = update_id
+        row.next_allowed = now + (300 if chat.get('type') in ('group', 'supergroup') else 30)
+        db.session.commit()
+        return True
 
     configured = False
     bot_username = ''
@@ -41,8 +69,18 @@ def install_launcher(app, db):
         if not token or not url.startswith('https://'):
             return
 
+        pause = db.session.get(TelegramMenuGuard, 'api-pause')
+        if pause and pause.next_allowed > int(time.time()):
+            return
+
         def call(method, data):
             response = requests.post('https://api.telegram.org/bot' + token + '/' + method, json=data, timeout=8)
+            if response.status_code == 429:
+                try:
+                    seconds = max(1, int(response.json().get('parameters', {}).get('retry_after', 60)))
+                except (TypeError, ValueError, AttributeError):
+                    seconds = 60
+                raise TelegramRetryAfter(seconds)
             if response.status_code == 403 and method in ('sendMessage', 'editMessageReplyMarkup'):
                 return None
             if response.status_code == 400:
@@ -106,20 +144,32 @@ def install_launcher(app, db):
             updates = call('getUpdates', {'offset': state.offset, 'limit': 5, 'timeout': 0,
                                           'allowed_updates': ['message', 'callback_query']})
             for event in updates:
+                # Renew ownership before another external operation.
+                owned = db.session.execute(update(TelegramLauncherState).where(
+                    TelegramLauncherState.id == 1, TelegramLauncherState.owner == owner,
+                    TelegramLauncherState.lease_until >= int(time.time())
+                ).values(lease_until=int(time.time()) + 240)).rowcount
+                db.session.commit()
+                if not owned:
+                    break
                 callback = event.get('callback_query')
                 message = event.get('message') or (callback or {}).get('message') or {}
                 chat = message.get('chat', {})
                 if callback:
                     call('answerCallbackQuery', {'callback_query_id': callback['id'],
                          'text': 'Retrouvez toutes les fonctionnalités dans NyxPepz.'})
-                    if chat.get('type') == 'private':
+                    if chat.get('type') == 'private' and reserve_reply(chat, event['update_id']):
                         call('editMessageReplyMarkup', {'chat_id': chat['id'], 'message_id': message['message_id'],
                                                         'reply_markup': keyboard})
-                elif chat.get('type') == 'private' and message.get('text'):
+                elif (chat.get('type') == 'private'
+                      and is_group_start(message.get('text'), bot_username)
+                      and reserve_reply(chat, event['update_id'])):
                     call('sendMessage', {'chat_id': chat['id'],
                          'text': WELCOME_TEXT,
                          'reply_markup': keyboard})
-                elif chat.get('type') in ('group', 'supergroup') and is_group_start(message.get('text'), bot_username):
+                elif (chat.get('type') in ('group', 'supergroup')
+                      and is_group_start(message.get('text'), bot_username)
+                      and reserve_reply(chat, event['update_id'])):
                     # web_app buttons are private-chat only. Telegram's main-app
                     # link opens the app in a group; otherwise use the private bot.
                     link = 'https://t.me/' + bot_username + ('?startapp=group' if has_main_app else '?start=group')
@@ -134,6 +184,15 @@ def install_launcher(app, db):
                 db.session.execute(update(TelegramLauncherState).where(TelegramLauncherState.id == 1,
                     TelegramLauncherState.owner == owner).values(offset=event['update_id'] + 1))
                 db.session.commit()
+        except TelegramRetryAfter as exc:
+            db.session.rollback()
+            pause = db.session.get(TelegramMenuGuard, 'api-pause')
+            if pause is None:
+                pause = TelegramMenuGuard(key='api-pause')
+                db.session.add(pause)
+            pause.next_allowed = int(time.time()) + exc.seconds
+            db.session.commit()
+            app.logger.warning('Menu Telegram : pause demandée par Telegram (%s secondes)', exc.seconds)
         except Exception as exc:
             db.session.rollback()
             # Never log raw requests exceptions: their URLs contain the bot token.
@@ -144,3 +203,4 @@ def install_launcher(app, db):
             db.session.commit()
 
     return tick
+
