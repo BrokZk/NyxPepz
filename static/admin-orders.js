@@ -267,7 +267,28 @@
    form.onsubmit=e=>{e.preventDefault();if(busy||!verified||!form.reportValidity())return;const state=['paid','gifted'].includes(o.status)?'shipped':o.status==='available'?'delivered':select.value;mutate('shipping',{tracking_number:tracking.input.value.trim(),status:state},state==='delivered'?'Commande marquée comme livrée.':'Livraison mise à jour.',state==='delivered'?'history':'shipping');};actions.append(form);
    if(['paid','gifted'].includes(o.status))actions.append(action('Remettre dans les bordereaux à faire',()=>mutate('preparation',{prepared:false},'La commande est de nouveau dans les bordereaux à faire.','preparing')));
   }else{actions.append(el('h2','',o.status_label));if(o.tracking_number)contactField(actions,'Numéro de suivi',o.tracking_number);}
-  host.append(privateNoteCard(o));controls();
+  host.append(privateNoteCard(o));
+  if(o.can_delete){
+   const removal=el('section','ao-card');
+   const remove=action('Supprimer la commande',()=>deleteOrder());remove.classList.add('ao-danger');
+   removal.append(remove,el('p','ao-muted','Pour les commandes test ou non payées. Le stock et les points réservés seront libérés.'));
+   host.append(removal);
+  }
+  controls();
+ }
+ async function deleteOrder(){
+  if(busy||!verified||!selected?.can_delete)return;
+  const reference=selected.reference;
+  if(!window.confirm('Supprimer la commande '+reference+' ?\nLe stock et les points réservés seront libérés.'))return;
+  busy=true;controls();note('aoDetailError','');note('aoDetailStatus','Suppression en cours…');
+  try{
+   await request('/api/shop/admin/orders/'+encodeURIComponent(reference)+'/delete',{method:'POST',body:JSON.stringify({})});
+   noteDrafts.delete(reference);dirty=true;cursors=[null];page=0;next=null;
+   busy=false;showList();toast('Commande supprimée.');
+  }catch(e){
+   verified=false;dirty=true;note('aoDetailStatus','');
+   note('aoDetailError',(e.status?e.message:'La réponse n’a pas été reçue.')+' Actualisez la commande avant de réessayer.');
+  }finally{busy=false;controls();}
  }
  async function mutate(endpoint,payload,message,destination){
   if(busy||!verified||!selected)return;const reference=selected.reference;busy=true;controls();note('aoDetailError','');note('aoDetailStatus','Enregistrement en cours…');
@@ -315,4 +336,5 @@
  });
  const previousBack=goBack;goBack=function(){if(active()&&!get('aoDetail').hidden){showList({restore:true});return;}previousBack();};root.querySelector('.page-back').onclick=()=>goBack();
 })();
+
 

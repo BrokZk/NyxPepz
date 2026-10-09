@@ -23,3 +23,7 @@
 /* Saved products, formats and quantities on ready-to-send cards. */
 .ao-order-row .ao-row-contents{display:block;margin-top:8px}
 .ao-row-content-item{display:block;margin-top:4px;font-size:12px;line-height:1.5;font-weight:600;color:#c6e3ff;overflow-wrap:anywhere}
+
+#adminOrders .ao-danger{background:#b42318;color:#fff;border:1px solid #f97066;font-weight:700;}
+#adminOrders .ao-danger:hover:not(:disabled){background:#912018;}
+
