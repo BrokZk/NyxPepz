@@ -1,0 +1,17 @@
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#081b32;color:#eff7ff;font-size:16px}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 100% 0,#1c4269 0,transparent 60%),#081b32;min-height:100vh}
+main{max-width:560px;margin:auto;padding:28px 22px calc(24px + env(safe-area-inset-bottom))}
+.brand{font-size:23px;font-weight:700;margin:0 0 26px}.eyebrow{color:#98bfdc;font-size:11px;letter-spacing:2px}
+h1{font-size:30px;margin:8px 0 12px}header>p:last-child,.privacy,footer{color:#b0c5da;line-height:1.6}
+fieldset{border:0;padding:0;margin:28px 0}legend{font-size:18px;font-weight:600;margin-bottom:20px}
+label{display:block;font-size:13px;font-weight:600;margin:0 0 20px}label span{font-weight:400;color:#a8bbd0}
+input,select{width:100%;margin-top:9px;padding:14px 12px;border:1px solid #38536e;border-radius:8px;background:#10283f;color:#fff;font:inherit;font-size:16px}
+input:focus,select:focus{outline:2px solid #81c8ff;outline-offset:2px}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.summary{padding:20px;border:1px solid #355572;background:#102942;border-radius:14px;margin-bottom:22px}h2{font-size:19px;margin-top:0}
+ul{list-style:none;padding:0}li{margin:12px 0;line-height:1.5}dl{margin:20px 0 0}dl>div{display:flex;justify-content:space-between;gap:16px;margin:10px 0}dd{margin:0}
+.total{border-top:1px solid #406079;padding-top:14px;font-size:21px;font-weight:700}
+#points,.privacy{font-size:13px}.check{display:flex;gap:12px;align-items:flex-start;line-height:1.5}.check input{width:20px;height:20px;margin:0;flex-shrink:0}.check span{color:#e8f2fc}
+button{width:100%;border:1px solid #426480;border-radius:10px;padding:15px;font:inherit;cursor:pointer;background:#112b45;color:#dcefff;margin-bottom:12px}
+.primary{background:#e6f5ff;color:#082a4e;font-weight:700;border:0}button:disabled{opacity:.55;cursor:wait}#message{padding:14px 0;line-height:1.5;color:#b9d9f3}
+#message.error{color:#ffb6b6}footer{text-align:center;font-size:12px;margin-top:24px}
+[hidden]{display:none!important}@media(max-width:340px){.two{grid-template-columns:1fr}main{padding-left:16px;padding-right:16px}}

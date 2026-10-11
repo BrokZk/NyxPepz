@@ -6,6 +6,9 @@ from sqlalchemy.exc import IntegrityError
 def inventory_lines(lines):
     quantities = {}
     for line in lines:
+        # Cosmetics from the dedicated bridge do not use the peptide inventory.
+        if line.get('kind') == 'cosmetic' and 'cosmetic_id' in line and 'product_id' not in line and 'pack_id' not in line:
+            continue
         parts = line.get('components') if 'pack_id' in line else [line]
         for part in parts:
             pid = part['product_id']
@@ -176,3 +179,4 @@ def install_packs(app, db, Product, Pack, Marker, require_admin):
                 raise
 
     return {'line': line, 'seed': seed, 'Composition': PackComposition}
+
