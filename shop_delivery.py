@@ -96,7 +96,13 @@ def install_delivery(app, db, User, shop):
         response.raise_for_status()
 
     def telegram_send(order, job):
-        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        cosmetics = bool(order.lines) and all(line.get("kind") == "cosmetic" for line in order.lines)
+        customer = job.kind.startswith('client_')
+        if cosmetics and customer and job.kind == "client_created":
+            # The shop bot already sends the checkout/payment message.
+            return "cosmetics_checkout_message"
+        token_key = "NYXPEPZ_CATALOG_BOT_TOKEN" if cosmetics else "TELEGRAM_BOT_TOKEN"
+        token = os.environ.get(token_key, "")
         if not token:
             raise RuntimeError("Bot Telegram non configuré")
         customer = job.kind.startswith('client_')
@@ -278,5 +284,6 @@ def install_delivery(app, db, User, shop):
     shop['run_jobs'] = run_jobs
     shop['sheet_write'] = sheet_write
     shop['telegram_send'] = telegram_send
+
 
 
