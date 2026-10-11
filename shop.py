@@ -377,6 +377,11 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
 
     def enqueue(order, event, recipients=None):
         # One durable entry per event and destination; workers never recreate orders.
+        cosmetics = bool(order.lines) and all(line.get("kind")=="cosmetic" for line in order.lines)
+        notifier = app.extensions.get("cosmetics_admin_notice")
+        if cosmetics and notifier:
+            notifier(order,event)
+            recipients = []  # Cosmetics admin alerts are delivered privately by the shop bot.
         destinations = [] if event == "payment_help" else [("sheets", "")]
         destinations += [("telegram_" + event, recipient) for recipient in (admin_recipients() if recipients is None else recipients)]
         if event in ("created", "paid", "gifted", "shipped", "available", "delivered"):
@@ -1084,5 +1089,6 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order,
         "config": config, "payment_link": payment_link}
     return app.extensions["nyx_shop"]
+
 
 

@@ -1,0 +1,2 @@
+nav.nyx-four-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));}
+nav.nyx-four-nav button{width:100%;}

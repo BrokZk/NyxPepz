@@ -101,6 +101,13 @@ def install_delivery(app, db, User, shop):
             raise RuntimeError("Bot Telegram non configuré")
         customer = job.kind.startswith('client_')
         event = job.kind.split('_', 1)[1]
+        cosmetics = bool(order.lines) and all(line.get("kind")=="cosmetic" for line in order.lines)
+        notifier = app.extensions.get("cosmetics_admin_notice")
+        if cosmetics and not customer and notifier:
+            # Convert any older queued admin alert to the private minimal message.
+            notifier(order,event)
+            db.session.commit()
+            return None
         messages = {"created": "Nouvelle commande reçue — en attente de paiement", "paid": "Commande payée et validée",
                     "shipped": "Votre colis a été expédié", "available": "Votre colis est disponible au point de retrait / locker",
                     "delivered": "Colis livré", "expired": "Réservation expirée", "cancelled": "Commande annulée",
@@ -271,4 +278,5 @@ def install_delivery(app, db, User, shop):
     shop['run_jobs'] = run_jobs
     shop['sheet_write'] = sheet_write
     shop['telegram_send'] = telegram_send
+
 
