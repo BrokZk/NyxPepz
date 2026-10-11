@@ -159,14 +159,15 @@ function promoSlide(x){
  return `<article class="promo-slide"><div class="promo-copy"><small>PACK & PROMO</small><h2>${escapeHTML(x.title)}</h2><p>${escapeHTML(x.subtitle||"")}</p><strong>${x.price?escapeHTML(x.price)+" €":"Offre à venir"}</strong><button data-pack-open="${x.id}">Voir ce pack　›</button></div>${packVisual(x)}<div class="promo-wave"></div></article>`
 }
 function setPromo(i,user=false){
- if(!packs.length)return;promoIndex=(i+packs.length)%packs.length;
+ if(!$("#promoTrack")||!packs.length)return;promoIndex=(i+packs.length)%packs.length;
  $("#promoTrack").style.transform=`translateX(-${promoIndex*100}%)`;
  $$("#promoDots button").forEach((b,k)=>b.classList.toggle("active",k===promoIndex));
  if(user)restartPromo();
 }
-function restartPromo(){clearInterval(promoTimer);if(packs.length>1&&!document.hidden&&!matchMedia("(prefers-reduced-motion: reduce)").matches)promoTimer=setInterval(()=>setPromo(promoIndex+1),5200)}
+function restartPromo(){clearInterval(promoTimer);if($("#promoCarousel")&&packs.length>1&&!document.hidden&&!matchMedia("(prefers-reduced-motion: reduce)").matches)promoTimer=setInterval(()=>setPromo(promoIndex+1),5200)}
 async function loadPacks(){
  try{packs=await api("/api/packs")}catch{packs=[]}
+ if(!$("#promoCarousel")||!$("#promoTrack")||!$("#promoDots")){clearInterval(promoTimer);return;}
  if(!packs.length){clearInterval(promoTimer);$("#promoTrack").innerHTML='<article class="promo-slide"><div class="promo-copy"><small>NYXPEPZ</small><h2>Découvrez le catalogue</h2><p>Retrouvez tous nos produits.</p><button data-go="catalog">Voir le catalogue　›</button></div></article>';$("#promoDots").innerHTML="";$("#promoTrack button").onclick=()=>go("catalog");return}
 
  $("#promoTrack").innerHTML=packs.map(promoSlide).join("");
@@ -349,6 +350,7 @@ async function editPackComposition(id){
  await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
  }catch(e){toast(e.message);}
 }
+
 
 
 
