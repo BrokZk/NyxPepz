@@ -2,6 +2,7 @@
 import json
 import os
 import time
+import sqlite3
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -28,40 +29,107 @@ def load_catalog():
     return data
 
 
+def button(label, action):
+    return {"text": label, "callback_data": action}
+
+
 def menu(catalog):
     return {"inline_keyboard": [
-        [{"text": item["title"], "callback_data": f"info:{i}"}]
-        for i, item in enumerate(catalog)
+        [button("🛍 Voir les produits", "catalog")],
+        [button("👤 Mon profil", "profile"), button("🛒 Mon panier", "basket")],
     ]}
 
 
-def handle(update, catalog, api):
+class SelectionStore:
+    def __init__(self, path):
+        self.db = sqlite3.connect(path)
+        self.db.execute("CREATE TABLE IF NOT EXISTS selections (user_id INTEGER, title TEXT, PRIMARY KEY(user_id, title))")
+
+    def titles(self, user_id):
+        return {row[0] for row in self.db.execute("SELECT title FROM selections WHERE user_id = ?", (user_id,))}
+
+    def add(self, user_id, title):
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO selections VALUES (?, ?)", (user_id, title))
+
+    def clear(self, user_id):
+        with self.db:
+            self.db.execute("DELETE FROM selections WHERE user_id = ?", (user_id,))
+
+
+def screen(action, catalog, user, store):
+    user_id = user["id"]
+    selected = store.titles(user_id)
+    back = [button("‹ Retour", "menu")]
+    if action == "menu":
+        return "🌙 Bienvenue chez NyxPepz !\n\nConsultez les fiches et conservez celles qui vous intéressent dans votre panier documentaire.\n\n" + NOTICE, menu(catalog)
+    if action == "catalog":
+        rows = [[button(item["title"], f"info:{i}")] for i, item in enumerate(catalog)]
+        return "🛍 Voir les produits\n\nChoisissez une fiche informative.", {"inline_keyboard": rows + [back]}
+    if action == "profile":
+        name = str(user.get("first_name") or "Membre")[:100]
+        username = user.get("username")
+        text = "👤 Mon profil\n\nBonjour " + name + " !"
+        if username:
+            text += "\nPseudo : @" + str(username)[:64]
+        count = sum(item["title"] in selected for item in catalog)
+        text += f"\nFiches enregistrées : {count}\n\nCe profil utilise votre compte Telegram.\n" + NOTICE
+        return text, {"inline_keyboard": [[button("🛒 Mon panier", "basket")], back]}
+    if action == "clear":
+        store.clear(user_id)
+        selected = set()
+        action = "basket"
+    if action == "basket":
+        rows = [[button(item["title"], f"info:{i}")] for i, item in enumerate(catalog) if item["title"] in selected]
+        text = "🛒 Mon panier\n\n" + (f"{len(rows)} fiche(s) enregistrée(s)." if rows else "Votre panier documentaire est vide.")
+        text += "\n\nSélection de fiches uniquement, sans commande ni paiement."
+        if rows:
+            rows.append([button("🗑 Vider mon panier", "clear")])
+        return text, {"inline_keyboard": rows + [[button("🛍 Voir les produits", "catalog")], back]}
+    if action.startswith(("info:", "save:")):
+        prefix, _, number = action.partition(":")
+        if not number.isdigit() or int(number) >= len(catalog):
+            return None
+        index = int(number)
+        item = catalog[index]
+        if prefix == "save":
+            store.add(user_id, item["title"])
+            selected.add(item["title"])
+        text = item["title"] + "\n\n" + item["description"] + "\n\n" + NOTICE
+        rows = []
+        if item["title"] not in selected:
+            rows.append([button("📌 Conserver dans mon panier", f"save:{index}")])
+        else:
+            text += "\n\n✓ Fiche conservée dans votre panier documentaire."
+        rows += [[button("🛒 Mon panier", "basket")], [button("‹ Catalogue", "catalog")]]
+        return text, {"inline_keyboard": rows}
+    return None
+
+
+def handle(update, catalog, api, store):
     query = update.get("callback_query")
+    message = (query.get("message") if query else update.get("message")) or {}
+    chat = message.get("chat") or {}
     if query:
         api("answerCallbackQuery", {"callback_query_id": query["id"]})
-        message = query.get("message") or {}
-        chat = message.get("chat") or {}
-        if chat.get("type") != "private":
-            return
-        key = query.get("data", "")
-        if key == "menu":
-            text, keyboard = "NyxPepz — fiches informatives\n\n" + NOTICE, menu(catalog)
-        elif key.startswith("info:") and key[5:].isdigit() and int(key[5:]) < len(catalog):
-            item = catalog[int(key[5:])]
-            text = item["title"] + "\n\n" + item["description"] + "\n\n" + NOTICE
-            keyboard = {"inline_keyboard": [[{"text": "‹ Catalogue", "callback_data": "menu"}]]}
-        else:
-            return
-        api("sendMessage", {"chat_id": chat["id"], "text": text, "reply_markup": keyboard})
+    if chat.get("type") != "private":
         return
-    message = update.get("message") or {}
-    chat = message.get("chat") or {}
-    if chat.get("type") == "private" and isinstance(message.get("text"), str):
-        api("sendMessage", {
-            "chat_id": chat["id"],
-            "text": "NyxPepz — fiches informatives\n\n" + NOTICE,
-            "reply_markup": menu(catalog),
-        })
+    user = (query.get("from") if query else message.get("from")) or {}
+    if user.get("id") != chat.get("id"):
+        return
+    if not query and not isinstance(message.get("text"), str):
+        return
+    action = query.get("data", "") if query else "menu"
+    result = screen(action, catalog, user, store)
+    if result is None:
+        return
+    text, keyboard = result
+    payload = {"chat_id": chat["id"], "text": text, "reply_markup": keyboard}
+    if query:
+        payload["message_id"] = message["message_id"]
+        api("editMessageText", payload)
+    else:
+        api("sendMessage", payload)
 
 
 def make_api(token):
@@ -103,6 +171,7 @@ def main():
             raise SystemExit("Un webhook est actif. Arrêtez l'ancien service avant configuration.")
     except ApiError as error:
         raise SystemExit(f"Vérification Telegram impossible (code {error.code}).") from None
+    store = SelectionStore(os.environ.get("NYXPEPZ_CATALOG_STATE_PATH") or str(Path(__file__).with_name("catalog-state.sqlite3")))
     offset = 0
     print("Catalogue informatif démarré. Ctrl+C pour arrêter.")
     while True:
@@ -113,7 +182,7 @@ def main():
             })
             for update in updates:
                 try:
-                    handle(update, catalog, api)
+                    handle(update, catalog, api, store)
                 except ApiError as error:
                     if error.code not in (400, 403):
                         raise
