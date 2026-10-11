@@ -1,0 +1,1093 @@
+"""Mini-app checkout. All prices, stock and payment transitions are server-owned."""
+import base64
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import time
+import unicodedata
+import uuid
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from urllib.parse import urlencode, unquote, urlparse
+
+import click
+import requests
+from flask import jsonify, request
+from shop_packs import inventory_lines
+from sqlalchemy import update, or_, and_, case, cast, String, func
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+SHIPPING = {"FR": 500, "BE": 500, "ES": 1000}
+COUNTRIES = {"FR": "France", "BE": "Belgique", "ES": "Espagne"}
+REWARDS = {150: 1000, 300: 2500, 500: 5000, 750: 8000}
+STATUSES = {"awaiting_payment": "En attente de paiement", "payment_review": "Paiement reçu — vérification",
+            "paid": "Payée", "gifted": "Cadeau offert — à préparer", "shipped": "Expédiée", "available": "Disponible au point de retrait",
+            "delivered": "Livrée", "cancelled": "Annulée", "expired": "Réservation expirée", "deleted": "Supprimée"}
+PAYMENT_METHODS = {"crypto": "Crypto", "bank_transfer": "Virement bancaire", "paypal": "PayPal",
+                   "cash": "Espèces", "other": "Autre"}
+PAID_STATUSES = ("paid", "shipped", "available", "delivered")
+
+
+def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent,
+                 current_user, require_admin, packs=None):
+    class ShopOrder(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        reference = db.Column(db.String(40), unique=True, nullable=False)
+        user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+        checkout_key = db.Column(db.String(64), nullable=False)
+        request_hash = db.Column(db.String(64), nullable=False)
+        contact = db.Column(db.JSON, nullable=False)
+        lines = db.Column(db.JSON, nullable=False)
+        subtotal_cents = db.Column(db.Integer, nullable=False)
+        shipping_cents = db.Column(db.Integer, nullable=False)
+        total_cents = db.Column(db.Integer, nullable=False)
+        discount_cents = db.Column(db.Integer, default=0, nullable=False)
+        reward_points = db.Column(db.Integer, default=0, nullable=False)
+        reward_reserved = db.Column(db.Boolean, default=False, nullable=False)
+        status = db.Column(db.String(32), default="awaiting_payment", nullable=False)
+        referrer_id = db.Column(db.Integer, nullable=True)
+        loyalty_policy = db.Column(db.String(24), nullable=False)
+        points = db.Column(db.Integer, default=0, nullable=False)
+        created_at = db.Column(db.BigInteger, nullable=False)
+        expires_at = db.Column(db.BigInteger, nullable=False)
+        stock_reserved = db.Column(db.Boolean, default=True, nullable=False)
+        payment_nonce = db.Column(db.String(64), nullable=False)
+        encrypted_wallet = db.Column(db.Text)
+        receiving_wallet = db.Column(db.String(80))
+        payout_wallet = db.Column(db.String(80))
+        ipn_token = db.Column(db.Text)
+        payment_note = db.Column(db.String(300))
+        tracking_number = db.Column(db.String(64))
+        sync_lease_until = db.Column(db.BigInteger, default=0, nullable=False)
+        sync_lease_token = db.Column(db.String(48))
+        __table_args__ = (db.UniqueConstraint("user_id", "checkout_key", name="uq_shop_checkout"),)
+
+    class ShopPayment(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), nullable=False)
+        transaction_id = db.Column(db.String(150), nullable=False, unique=True)
+        coin = db.Column(db.String(64), nullable=False)
+        amount = db.Column(db.String(80), nullable=False)
+        forwarded_amount = db.Column(db.String(80), nullable=False)
+        received_at = db.Column(db.BigInteger, nullable=False)
+
+    class ShopPreparation(db.Model):
+        # A separate, optional row also supports orders paid before this feature.
+        # Preparing a label never changes payment or shipment state.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        prepared_at = db.Column(db.BigInteger, nullable=False)
+        prepared_by_telegram_id = db.Column(db.BigInteger, nullable=False)
+
+    class ShopPaymentRecord(db.Model):
+        # Append-only audit entries keep administrator corrections separate from
+        # payment proofs and accounting events. No existing order needs migration.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        revision = db.Column(db.Integer, primary_key=True)
+        method = db.Column(db.String(24), nullable=False)
+        note = db.Column(db.String(300), nullable=False)
+        source = db.Column(db.String(32), nullable=False)
+        recorded_at = db.Column(db.BigInteger)
+        recorded_by_telegram_id = db.Column(db.BigInteger)
+
+    class ShopPrivateNote(db.Model):
+        # Administrative notes are separate from customer, payment and delivery
+        # data. Every edit, including clearing the note, keeps its own revision.
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), primary_key=True)
+        revision = db.Column(db.Integer, primary_key=True)
+        text = db.Column(db.Text, nullable=False)
+        updated_at = db.Column(db.BigInteger, nullable=False)
+        updated_by_telegram_id = db.Column(db.BigInteger, nullable=False)
+
+    class ShopProfile(db.Model):
+        user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+        contact = db.Column(db.JSON, nullable=False)
+
+    class ShopLoyalty(db.Model):
+        user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+        paid_cents = db.Column(db.BigInteger, default=0, nullable=False)
+
+    class ShopOutbox(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        event_key = db.Column(db.String(160), unique=True, nullable=False)
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), nullable=False)
+        kind = db.Column(db.String(32), nullable=False)
+        recipient = db.Column(db.String(32), default="", nullable=False)
+        state = db.Column(db.String(20), default="pending", nullable=False)
+        attempts = db.Column(db.Integer, default=0, nullable=False)
+        next_attempt = db.Column(db.BigInteger, default=0, nullable=False)
+        lease_until = db.Column(db.BigInteger, default=0, nullable=False)
+        lease_token = db.Column(db.String(48))
+        last_error = db.Column(db.String(160))
+
+    from ambassadors import install_ambassadors
+    ambassadors = install_ambassadors(app, db, User, ShopOrder, ConfirmedOrderEvent, current_user, require_admin)
+
+    def fail(message, status=400):
+        db.session.rollback()
+        return jsonify(error=message), status
+
+    @app.before_request
+    def shop_same_origin():
+        if request.path.startswith('/api/shop/') and request.method == 'POST':
+            origin = request.headers.get('Origin')
+            expected = os.environ.get('SHOP_PUBLIC_URL', request.host_url).rstrip('/')
+            if origin and origin.rstrip('/') != expected:
+                return fail('Origine de requête refusée', 403)
+
+    def enabled():
+        return os.environ.get("SHOP_ENABLED") == "1"
+
+    def admin_recipients():
+        # Telegram user IDs are positive integers. Normalize duplicates before
+        # constructing durable keys, including configuration with leading zeros.
+        recipients = set()
+        for value in os.environ.get("ADMIN_TELEGRAM_IDS", "").split(","):
+            value = value.strip()
+            if re.fullmatch(r"[0-9]{1,16}", value) and 0 < int(value) < 2 ** 52:
+                recipients.add(str(int(value)))
+        return sorted(recipients)
+
+    def payment_help_available():
+        return enabled() and bool(admin_recipients())
+
+    def payment_help_requested(order):
+        # Keep this history after successful delivery, cancellation or expiry.
+        return ShopOutbox.query.filter_by(order_id=order.id, kind="telegram_payment_help").first() is not None
+
+    def is_gift_order(order):
+        gifts = app.extensions.get('nyx_gifts')
+        return bool(gifts and gifts['is_gift_order'](order))
+
+    def serialize_payment_record(record):
+        return {"method": record.method, "label": PAYMENT_METHODS.get(record.method, "Non renseigné"),
+                "note": record.note, "revision": record.revision, "source": record.source,
+                "recorded_at": record.recorded_at,
+                "recorded_by_telegram_id": record.recorded_by_telegram_id}
+
+    def payment_record(order):
+        latest = ShopPaymentRecord.query.filter_by(order_id=order.id).order_by(
+            ShopPaymentRecord.revision.desc()).first()
+        if latest:
+            return serialize_payment_record(latest)
+        proof = ShopPayment.query.filter_by(order_id=order.id).first()
+        method = "crypto" if proof else "unknown"
+        return {"method": method, "label": PAYMENT_METHODS.get(method, "Non renseigné"),
+                "note": order.payment_note or "", "revision": 0,
+                "source": "legacy_paygate" if proof else "unrecorded", "recorded_at": None,
+                "recorded_by_telegram_id": None}
+
+    def add_payment_record(order, method, note, admin, source, previous):
+        # Preserve the previous inferred information when correcting an old order.
+        if source == "admin_correction" and previous["revision"] == 0:
+            db.session.add(ShopPaymentRecord(order_id=order.id, revision=0,
+                method=previous["method"], note=previous["note"], source=previous["source"],
+                recorded_at=previous["recorded_at"],
+                recorded_by_telegram_id=previous["recorded_by_telegram_id"]))
+        db.session.add(ShopPaymentRecord(order_id=order.id, revision=previous["revision"] + 1,
+            method=method, note=note, source=source, recorded_at=int(time.time()),
+            recorded_by_telegram_id=admin.telegram_id))
+
+    def payment_note(payload):
+        note = payload.get("note", "")
+        if (not isinstance(note, str) or not 3 <= len(note.strip()) <= 300
+                or any(ord(c) < 32 or ord(c) == 127 for c in note)):
+            raise ValueError("Indiquez comment le paiement a été reçu (3 à 300 caractères)")
+        return note.strip()
+
+    @app.after_request
+    def private_shop_response(response):
+        if request.path.startswith('/api/shop/') and request.path not in ('/api/shop/config', '/api/shop/paygate/callback'):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def policy():
+        return "euro1"
+
+    def paygate_ready():
+        return (os.environ.get("PAYGATE_ENABLED") == "1"
+                and re.fullmatch(r"0x[0-9a-fA-F]{40}", os.environ.get("PAYGATE_WALLET", ""))
+                and os.environ.get("SHOP_PUBLIC_URL", "").startswith("https://")
+                and (Path(app.root_path) / "paygate_callback_public.pem").is_file())
+
+    def config():
+        return {"enabled": enabled(), "payment_enabled": bool(paygate_ready()),
+                "payment_help_available": payment_help_available(),
+                "countries": [{"code": k, "name": COUNTRIES[k], "shipping_cents": v} for k, v in SHIPPING.items()],
+                "loyalty_policy": policy(), "reward_configured": True,
+                "rewards": [{"points": p, "discount_cents": v} for p, v in REWARDS.items()],
+                "referral_rule": "first_10_then_5_percent",
+                "referral_first_percent": 10, "referral_next_percent": 5,
+                "payment_notice": "Le paiement s’ouvre chez PayGate. Les éventuels frais du prestataire y sont affichés."}
+
+    def private_note(order):
+        latest = ShopPrivateNote.query.filter_by(order_id=order.id).order_by(
+            ShopPrivateNote.revision.desc()).first()
+        return {"text": latest.text if latest else "", "revision": latest.revision if latest else 0,
+                "updated_at": latest.updated_at if latest else None}
+
+    def customer_notifications(order, owner):
+        labels = {"created": "Commande reçue", "paid": "Paiement validé", "gifted": "Cadeau confirmé",
+                  "shipped": "Colis expédié", "available": "Colis disponible", "delivered": "Colis livré"}
+        status_labels = {"sent": "Message envoyé", "pending": "En attente d’envoi",
+                         "sending": "Envoi en cours", "retrying": "Nouvelle tentative prévue",
+                         "unreachable": "Client injoignable"}
+        if not owner:
+            return {"latest": None, "items": [], "attention_count": 0}
+        now = int(time.time())
+        query = ShopOutbox.query.filter(ShopOutbox.order_id == order.id,
+            ShopOutbox.recipient == str(owner.telegram_id),
+            ShopOutbox.kind.startswith("client_", autoescape=True))
+        def status(job):
+            if job.state == "done":
+                return "unreachable" if job.last_error == "client_unreachable" else "sent"
+            if job.state == "working" and job.lease_until > now:
+                return "sending"
+            return "retrying" if job.attempts > 0 else "pending"
+        items = []
+        for job in query.order_by(ShopOutbox.id.desc()).limit(10):
+            event, state = job.kind[len("client_"):], status(job)
+            items.append({"event": event, "label": labels.get(event, "Message au client"),
+                          "status": state, "status_label": status_labels[state]})
+        # Count all jobs needing attention, even when they are older than the
+        # ten displayed entries. A Telegram 403 is terminal, never a success.
+        attention = query.filter(or_(and_(ShopOutbox.state == "done", ShopOutbox.last_error == "client_unreachable"),
+            and_(ShopOutbox.state != "done", ShopOutbox.attempts > 0,
+                 or_(ShopOutbox.state != "working", ShopOutbox.lease_until <= now)))).count()
+        return {"latest": items[0] if items else None, "items": items, "attention_count": attention}
+
+    def serialize(order, admin=False):
+        requested_help = payment_help_requested(order)
+        gifts = app.extensions.get('nyx_gifts')
+        gift_id = gifts['order_gift_id'](order) if gifts else None
+        awaiting_payment = gift_id is None and order.status == "awaiting_payment" and order.expires_at > int(time.time())
+        data = {"reference": order.reference, "lines": order.lines,
+                "is_gift": gift_id is not None, "gift_id": gift_id,
+                "subtotal_cents": order.subtotal_cents, "shipping_cents": order.shipping_cents,
+                "total_cents": order.total_cents, "status": order.status,
+                "discount_cents": order.discount_cents, "reward_points": order.reward_points,
+                "status_label": STATUSES.get(order.status, order.status), "created_at": order.created_at,
+                "expires_at": order.expires_at, "points": order.points,
+                "country": order.contact["country"], "tracking_number": order.tracking_number,
+                "can_pay": awaiting_payment and bool(paygate_ready()),
+                "payment_help_requested": requested_help,
+                "payment_help_pending": requested_help and order.status in ("awaiting_payment", "payment_review"),
+                "can_request_payment_help": awaiting_payment and payment_help_available() and not requested_help}
+        if admin:
+            owner = db.session.get(User, order.user_id)
+            preparation = db.session.get(ShopPreparation, order.id)
+            data.update(can_delete=can_delete_order(order), contact=order.contact, telegram_id=owner.telegram_id if owner else None,
+                        username=owner.username if owner else None, payment_note=order.payment_note,
+                        private_note=private_note(order), customer_notifications=customer_notifications(order, owner),
+                        payment_record=payment_record(order),
+                        payment_history=[serialize_payment_record(record) for record in
+                            ShopPaymentRecord.query.filter_by(order_id=order.id).order_by(
+                                ShopPaymentRecord.revision.desc()).limit(10)],
+                        preparation={"prepared": preparation is not None,
+                                     "prepared_at": preparation.prepared_at if preparation else None},
+                        payments=[{"coin": p.coin, "amount": p.amount, "forwarded_amount": p.forwarded_amount,
+                                   "transaction_id": p.transaction_id} for p in ShopPayment.query.filter_by(order_id=order.id)],
+                        sync_pending=ShopOutbox.query.filter(ShopOutbox.order_id == order.id, ShopOutbox.state != "done").count())
+        return data
+
+    def parse_contact(value):
+        if not isinstance(value, dict):
+            raise ValueError("Coordonnées manquantes")
+        limits = {"first_name": 80, "last_name": 80, "email": 180, "phone": 30,
+                  "address": 180, "address_extra": 120, "postal_code": 12, "city": 90,
+                  "country": 2, "discovery": 200}
+        contact = {}
+        for key, limit in limits.items():
+            text = value.get(key, "")
+            if not isinstance(text, str) or len(text.strip()) > limit or any(ord(c) < 32 for c in text):
+                raise ValueError("Coordonnées invalides")
+            contact[key] = text.strip()
+            if not contact[key] and key != "address_extra":
+                raise ValueError("Complétez tous les champs obligatoires")
+        contact["country"] = contact["country"].upper()
+        if contact["country"] not in SHIPPING:
+            raise ValueError("Livraison disponible uniquement en France, Belgique et Espagne")
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", contact["email"]):
+            raise ValueError("Adresse email invalide")
+        if not re.fullmatch(r"\+?[0-9 ()\.\-]{7,30}", contact["phone"]):
+            raise ValueError("Numéro de téléphone invalide")
+        length = 4 if contact["country"] == "BE" else 5
+        if not re.fullmatch(r"\d{" + str(length) + r"}", contact["postal_code"]):
+            raise ValueError("Code postal invalide pour ce pays")
+        return contact
+
+    def quote(payload):
+        if not isinstance(payload, dict):
+            raise ValueError("Panier invalide")
+        country = payload.get("country")
+        if country not in SHIPPING:
+            raise ValueError("Choisissez France, Belgique ou Espagne")
+        requested = payload.get("items")
+        if not isinstance(requested, list) or not 1 <= len(requested) <= 50:
+            raise ValueError("Le panier doit contenir entre 1 et 50 produits différents")
+        quantities = {}
+        for item in requested:
+            if not isinstance(item, dict):
+                raise ValueError("Article invalide")
+            kind = 'pack_id' if 'pack_id' in item else 'product_id'
+            if 'pack_id' in item and 'product_id' in item:
+                raise ValueError("Article ambigu")
+            pid, qty = item.get(kind), item.get("quantity")
+            if type(pid) is not int or type(qty) is not int or pid < 1 or not 1 <= qty <= 99 or (kind, pid) in quantities:
+                raise ValueError("Quantité ou article invalide")
+            quantities[(kind, pid)] = qty
+        lines = []
+        for kind, pid in sorted(quantities):
+            qty = quantities[(kind, pid)]
+            if kind == 'pack_id':
+                if not packs:
+                    raise ValueError('Pack indisponible')
+                lines.append(packs['line'](pid, qty))
+                continue
+            product = db.session.get(Product, pid)
+            if not product or not product.active or product.stock < qty:
+                raise ValueError("Un produit n’est plus disponible dans la quantité demandée")
+            if type(product.price) is not int or not 0 < product.price <= 100000:
+                raise ValueError("Prix du produit indisponible")
+            lines.append({"product_id": pid, "name": product.name, "format": product.format,
+                          "quantity": qty, "unit_cents": product.price * 100,
+                          "line_cents": product.price * 100 * qty})
+        for part in inventory_lines(lines):
+            product = db.session.get(Product, part['product_id'])
+            if not product or not product.active or product.stock < part['quantity']:
+                raise ValueError('Stock insuffisant pour les produits et packs réunis')
+        subtotal = sum(x["line_cents"] for x in lines)
+        if subtotal > 10000000:
+            raise ValueError("Montant de commande trop élevé")
+        reward = payload.get("reward_points", 0)
+        if type(reward) is not int or reward not in (0, *REWARDS):
+            raise ValueError("Récompense invalide")
+        discount = REWARDS.get(reward, 0)
+        user = current_user()
+        if reward and (not user or user.loyalty_points < reward):
+            raise ValueError("Solde de points insuffisant")
+        if discount > subtotal:
+            raise ValueError("Le montant des produits doit couvrir la réduction choisie")
+        result = {"lines": lines, "country": country, "subtotal_cents": subtotal,
+                  "discount_cents": discount, "reward_points": reward,
+                  "shipping_cents": SHIPPING[country], "total_cents": subtotal - discount + SHIPPING[country]}
+        result["quote_hash"] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
+        return result
+
+    def enqueue(order, event, recipients=None):
+        # One durable entry per event and destination; workers never recreate orders.
+        cosmetics = bool(order.lines) and all(line.get("kind")=="cosmetic" for line in order.lines)
+        notifier = app.extensions.get("cosmetics_admin_notice")
+        if cosmetics and notifier:
+            notifier(order,event)
+            recipients = []  # Cosmetics admin alerts are delivered privately by the shop bot.
+        destinations = [] if event == "payment_help" else [("sheets", "")]
+        destinations += [("telegram_" + event, recipient) for recipient in (admin_recipients() if recipients is None else recipients)]
+        if event in ("created", "paid", "gifted", "shipped", "available", "delivered"):
+            user = db.session.get(User, order.user_id)
+            if user:
+                destinations.append(("client_" + event, str(user.telegram_id)))
+        for kind, recipient in destinations:
+            key = f"{order.reference}:{event}:{kind}:{recipient}"
+            if not ShopOutbox.query.filter_by(event_key=key).first():
+                db.session.add(ShopOutbox(event_key=key, order_id=order.id, kind=kind, recipient=recipient))
+
+    def release(order, status):
+        changed = db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id,
+            ShopOrder.status == "awaiting_payment", ShopOrder.stock_reserved == True).values(
+                status=status, stock_reserved=False), execution_options={"synchronize_session": False}).rowcount
+        if not changed:
+            return False
+        inventory=app.extensions.get("cosmetic_inventory")
+        if inventory:inventory["release"](order)
+        for line in inventory_lines(order.lines):
+            db.session.execute(update(Product).where(Product.id == line["product_id"]).values(stock=Product.stock + line["quantity"]))
+        if order.reward_reserved:
+            db.session.execute(update(User).where(User.id == order.user_id).values(loyalty_points=User.loyalty_points + order.reward_points))
+            db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id).values(reward_reserved=False))
+        db.session.refresh(order)
+        enqueue(order, status)
+        return True
+
+    def expire_orders():
+        orders = ShopOrder.query.filter(ShopOrder.status == "awaiting_payment", ShopOrder.expires_at <= int(time.time())).all()
+        count = sum(1 for order in orders if release(order, "expired"))
+        db.session.commit()
+        return count
+
+    @app.get("/api/shop/config")
+    def shop_config():
+        return jsonify(config())
+
+    @app.get("/api/shop/profile")
+    def shop_profile():
+        user = current_user()
+        if not user:
+            return fail("Ouvrez l’application depuis Telegram", 401)
+        profile = db.session.get(ShopProfile, user.id)
+        return jsonify(contact=profile.contact if profile else {}, has_referrer=user.referred_by_user_id is not None)
+
+    @app.post("/api/shop/quote")
+    def shop_quote():
+        if not current_user():
+            return fail("Ouvrez l’application depuis Telegram", 401)
+        try:
+            expire_orders()
+            return jsonify(quote(request.get_json(silent=True)))
+        except ValueError as exc:
+            return fail(str(exc))
+        except SQLAlchemyError:
+            return fail("Service momentanément indisponible", 503)
+
+    @app.post("/api/shop/orders")
+    def create_order():
+        user = current_user()
+        if not user:
+            return fail("Ouvrez l’application depuis Telegram", 401)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail("Commande invalide")
+        payment_choice = payload.get("payment_choice", "paygate")
+        if payment_choice not in ("paygate", "contact"):
+            return fail("Choix de paiement invalide")
+        key = request.headers.get("Idempotency-Key", "")
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{16,64}", key):
+            return fail("Identifiant de validation manquant")
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        try:
+            # Serialize orders and referral assignment for this customer.
+            db.session.execute(update(User).where(User.id == user.id).values(loyalty_points=User.loyalty_points))
+            db.session.refresh(user)
+            previous = ShopOrder.query.filter_by(user_id=user.id, checkout_key=key).first()
+            if previous:
+                if previous.request_hash != digest:
+                    return fail("Cette validation correspond à un autre panier", 409)
+                db.session.commit()
+                return jsonify(order=serialize(previous), duplicate=True)
+            if not enabled() or policy() == "pending" or (payment_choice == "paygate" and not paygate_ready()):
+                return fail("Les commandes en ligne sont en cours de préparation", 503)
+            recipients = admin_recipients()
+            if payment_choice == "contact" and not recipients:
+                return fail("La demande de rappel est momentanément indisponible", 503)
+            if ShopOrder.query.filter_by(user_id=user.id, status="awaiting_payment").count() >= 3:
+                return fail("Terminez ou annulez vos commandes en attente", 409)
+            contact = parse_contact(payload.get("contact"))
+            computed = quote({"items": payload.get("items"), "country": contact["country"], "reward_points": payload.get("reward_points", 0)})
+            if payload.get("quote_hash") != computed["quote_hash"]:
+                return fail("Le panier a changé. Vérifiez le nouveau total avant de confirmer.", 409)
+            code = payload.get("referral_code", "")
+            if not isinstance(code, str) or len(code) > 20:
+                return fail("Code de parrainage invalide")
+            code = code.strip().upper()
+            if code:
+                referrer = User.query.filter_by(referral_code=code).first()
+                if not referrer:
+                    return fail("Code de parrainage inconnu")
+                if referrer.id == user.id:
+                    return fail("Auto-parrainage interdit")
+                if user.referred_by_user_id not in (None, referrer.id):
+                    return fail("Un parrain est déjà associé à votre compte")
+                user.referred_by_user_id = referrer.id
+            ambassador = ambassadors['prepare'](user, payload.get('ambassador_code', ''))
+            prices = {x['product_id']: x['unit_cents'] for x in computed['lines'] if 'product_id' in x}
+            for line in inventory_lines(computed["lines"]):
+                conditions = [Product.id == line['product_id'], Product.active == True, Product.stock >= line['quantity']]
+                if line['product_id'] in prices:
+                    conditions.append(Product.price * 100 == prices[line['product_id']])
+                changed = db.session.execute(update(Product).where(*conditions).values(
+                        stock=Product.stock - line["quantity"])).rowcount
+                if changed != 1:
+                    return fail("Le stock ou le prix vient de changer. Vérifiez votre panier.", 409)
+            reward = computed["reward_points"]
+            if reward:
+                changed = db.session.execute(update(User).where(User.id == user.id, User.loyalty_points >= reward).values(loyalty_points=User.loyalty_points - reward)).rowcount
+                if changed != 1:
+                    return fail("Vos points ont changé. Vérifiez la récompense choisie.", 409)
+            now = int(time.time())
+            order = ShopOrder(reference="NYX-" + uuid.uuid4().hex[:20].upper(), user_id=user.id,
+                checkout_key=key, request_hash=digest, contact=contact, lines=computed["lines"],
+                subtotal_cents=computed["subtotal_cents"], shipping_cents=computed["shipping_cents"],
+                total_cents=computed["total_cents"], referrer_id=user.referred_by_user_id,
+                discount_cents=computed["discount_cents"], reward_points=reward, reward_reserved=bool(reward),
+                loyalty_policy=policy(), created_at=now, expires_at=now + 3600,
+                payment_nonce=secrets.token_urlsafe(32))
+            db.session.add(order)
+            profile = db.session.get(ShopProfile, user.id)
+            if profile:
+                profile.contact = contact
+            else:
+                db.session.add(ShopProfile(user_id=user.id, contact=contact))
+            db.session.flush()
+            ambassadors['attach'](order, ambassador)
+            enqueue(order, "created", recipients)
+            if payment_choice == "contact":
+                enqueue(order, "payment_help", recipients)
+            db.session.commit()
+            return jsonify(order=serialize(order)), 201
+        except ValueError as exc:
+            return fail(str(exc))
+        except (IntegrityError, SQLAlchemyError):
+            return fail("Impossible d’enregistrer la commande. Réessayez avec le même panier.", 503)
+
+    @app.get("/api/shop/orders")
+    def list_orders():
+        user = current_user()
+        if not user:
+            return fail("Non authentifié", 401)
+        try:
+            expire_orders()
+            return jsonify([serialize(o) for o in ShopOrder.query.filter_by(user_id=user.id).filter(ShopOrder.status != "deleted").order_by(ShopOrder.id.desc()).limit(100)])
+        except SQLAlchemyError:
+            return fail("Commandes momentanément indisponibles", 503)
+
+    @app.post("/api/shop/orders/<reference>/cancel")
+    def cancel_order(reference):
+        user = current_user()
+        if not user:
+            return fail("Non authentifié", 401)
+        order = ShopOrder.query.filter_by(reference=reference, user_id=user.id).first()
+        if not order:
+            return fail("Commande introuvable", 404)
+        try:
+            if not release(order, "cancelled"):
+                return fail("Cette commande ne peut plus être annulée ici", 409)
+            db.session.commit()
+            return jsonify(order=serialize(order))
+        except SQLAlchemyError:
+            return fail("Annulation indisponible", 503)
+
+    @app.post("/api/shop/orders/<reference>/payment-help")
+    def request_payment_help(reference):
+        user = current_user()
+        if not user:
+            return fail("Non authentifié", 401)
+        try:
+            # Lock the owned order before reading its state or notification
+            # history. This serializes concurrent help, payment and cancellation
+            # requests on PostgreSQL and SQLite; a unique event key is the backstop.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference, ShopOrder.user_id == user.id
+            ).values(status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference, user_id=user.id).populate_existing().one()
+            if payment_help_requested(order):
+                db.session.commit()
+                return jsonify(order=serialize(order), duplicate=True)
+            if order.status != "awaiting_payment" or order.expires_at <= int(time.time()):
+                return fail("Cette commande n’est plus en attente de paiement", 409)
+            recipients = admin_recipients()
+            if not enabled() or not recipients:
+                return fail("La demande de rappel est momentanément indisponible", 503)
+            enqueue(order, "payment_help", recipients)
+            db.session.commit()
+            return jsonify(order=serialize(order))
+        except SQLAlchemyError:
+            return fail("Impossible d’enregistrer la demande de rappel. Réessayez.", 503)
+
+    @app.post("/api/shop/orders/<reference>/pay")
+    def payment_link(reference, user=None):
+        user = user or current_user()
+        if not user:
+            return fail("Non authentifié", 401)
+        if not enabled() or not paygate_ready():
+            return fail("Paiement indisponible pour le moment", 503)
+        order = ShopOrder.query.filter_by(reference=reference, user_id=user.id).first()
+        if not order:
+            return fail("Commande introuvable", 404)
+        if order.status != "awaiting_payment" or order.expires_at <= int(time.time()):
+            return fail("Cette commande n’est plus en attente de paiement", 409)
+        try:
+            if not order.encrypted_wallet:
+                # Identical callback URL makes creation retry-safe at PayGate.
+                callback = os.environ["SHOP_PUBLIC_URL"].rstrip('/') + '/api/shop/paygate/callback?' + urlencode({"order": order.reference, "nonce": order.payment_nonce})
+                wallet = os.environ["PAYGATE_WALLET"]
+                response = requests.get("https://api.paygate.to/control/wallet.php", params={"address": wallet, "callback": callback}, timeout=20)
+                response.raise_for_status()
+                data = response.json()
+                receiving = data.get("polygon_address_in", "")
+                encrypted = data.get("address_in", "")
+                if not re.fullmatch(r"0x[0-9a-fA-F]{40}", receiving) or not isinstance(encrypted, str) or not encrypted or len(encrypted) > 6000:
+                    raise ValueError("Réponse PayGate invalide")
+                db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id, ShopOrder.encrypted_wallet == None).values(
+                    encrypted_wallet=encrypted, receiving_wallet=receiving.lower(), payout_wallet=wallet.lower(), ipn_token=data.get("ipn_token")))
+                db.session.commit()
+                db.session.refresh(order)
+            if order.status != "awaiting_payment" or order.expires_at <= int(time.time()):
+                return fail("Commande expirée ou déjà traitée", 409)
+            # address_in is already percent-encoded by PayGate; decode exactly once.
+            url = "https://checkout.paygate.to/pay.php?" + urlencode({"address": unquote(order.encrypted_wallet),
+                "amount": f"{order.total_cents // 100}.{order.total_cents % 100:02d}", "currency": "EUR", "email": order.contact["email"]})
+            return jsonify(url=url)
+        except (requests.RequestException, ValueError, SQLAlchemyError):
+            return fail("PayGate est momentanément indisponible. Votre commande est conservée.", 503)
+
+    def verify_callback():
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+        if request.headers.get("X-PayGate-Key-Id") != "v1":
+            return False
+        try:
+            key = serialization.load_pem_public_key((Path(app.root_path) / "paygate_callback_public.pem").read_bytes())
+            base = os.environ["SHOP_PUBLIC_URL"].rstrip('/') + '/api/shop/paygate/callback'
+            signed = base.encode() + b'?' + request.query_string
+            key.verify(base64.b64decode(request.headers.get("X-PayGate-Signature", ""), validate=True), signed, padding.PKCS1v15(), hashes.SHA256())
+            return True
+        except Exception:
+            return False
+
+    @app.get("/api/shop/paygate/callback")
+    def payment_callback():
+        if not verify_callback():
+            return fail("Signature invalide", 403)
+        if any(len(request.args.getlist(key)) != 1 for key in request.args):
+            return fail("Paramètres ambigus")
+        order = ShopOrder.query.filter_by(reference=request.args.get("order", "")).first()
+        if not order or not hmac.compare_digest(order.payment_nonce, request.args.get("nonce", "")):
+            return fail("Commande introuvable", 404)
+        if is_gift_order(order):
+            return fail("Cette commande cadeau ne nécessite aucun paiement", 409)
+        if not order.receiving_wallet or order.receiving_wallet != request.args.get("address_in", "").lower():
+            return fail("Adresse de réception incorrecte", 409)
+        try:
+            value = Decimal(request.args.get("value_coin", ""))
+            forwarded = Decimal(request.args.get("value_forwarded_coin", ""))
+            shares = json.loads(request.args.get("address_out", "{}"))
+            shares = {k.lower(): Decimal(str(v)) for k, v in shares.items()}
+            if not value.is_finite() or value <= 0 or not forwarded.is_finite() or forwarded <= 0:
+                raise ValueError()
+            share = shares.get(order.payout_wallet)
+            if share is None or not share.is_finite() or not 0 < share <= 1:
+                raise ValueError()
+            txid, coin = request.args.get("txid_in", ""), request.args.get("coin", "")
+            if not re.fullmatch(r"[A-Za-z0-9:_-]{10,150}", txid) or not re.fullmatch(r"[a-zA-Z0-9_]{2,64}", coin):
+                raise ValueError()
+            # A signed crypto transfer does not prove that the full EUR invoice
+            # was paid. Keep it in review until the gross EUR amount is verified.
+            db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id).values(status=ShopOrder.status))
+            previous = ShopPayment.query.filter_by(transaction_id=txid).first()
+            if previous:
+                if previous.order_id != order.id:
+                    return fail("Transaction déjà associée", 409)
+                db.session.commit()
+                return jsonify(ok=True, duplicate=True)
+            db.session.refresh(order)
+            db.session.add(ShopPayment(order_id=order.id, transaction_id=txid, coin=coin,
+                amount=str(value), forwarded_amount=str(forwarded * share), received_at=int(time.time())))
+            if order.status not in ("paid", "shipped", "available", "delivered"):
+                order.status = "payment_review"
+            db.session.flush()
+            enqueue(order, "payment_received_" + str(ShopPayment.query.filter_by(order_id=order.id).count()))
+            db.session.commit()
+            return jsonify(ok=True)
+        except (ValueError, InvalidOperation, TypeError, AttributeError):
+            return fail("Confirmation incomplète")
+        except SQLAlchemyError:
+            return fail("Confirmation temporairement indisponible", 503)
+
+    def credit_order(order):
+        if is_gift_order(order):
+            raise ValueError("Une commande cadeau ne donne pas de crédit d’achat")
+        user = db.session.get(User, order.user_id)
+        db.session.execute(update(User).where(User.id == user.id).values(loyalty_points=User.loyalty_points))
+        db.session.refresh(user)
+        progress = db.session.get(ShopLoyalty, user.id)
+        if not progress:
+            progress = ShopLoyalty(user_id=user.id, paid_cents=0)
+            db.session.add(progress)
+        paid = order.subtotal_cents - order.discount_cents
+        points = (progress.paid_cents + paid) // 100 - progress.paid_cents // 100
+        progress.paid_cents += paid
+        if user.loyalty_points + points > 2147483647:
+            raise ValueError("Plafond de points atteint")
+        first_paid = ConfirmedOrderEvent.query.filter_by(user_id=user.id).first() is None
+        ambassadors['credit'](order, first_paid)
+        db.session.add(ConfirmedOrderEvent(external_order_id=order.reference, user_id=user.id, loyalty_points=points))
+        user.loyalty_points += points
+        order.points = points
+        if order.referrer_id is not None:
+            app.extensions["referral_rewards"]["credit"](
+                order.reference,user.id,order.referrer_id,paid,first_paid)
+
+    def order_group_filter(group):
+        groups = {'action': ('awaiting_payment', 'payment_review', 'paid', 'gifted'),
+                  'preparing': ('paid', 'gifted'), 'ready': ('paid', 'gifted'),
+                  'payments': ('awaiting_payment', 'payment_review'),
+                  'expired': ('expired',),
+                  'shipping': ('shipped', 'available'), 'history': ('paid', 'gifted', 'shipped', 'available', 'delivered')}
+        if group not in groups:
+            raise ValueError('Filtre invalide')
+        condition = ShopOrder.status.in_(groups[group])
+        if group in ('preparing', 'ready'):
+            prepared = db.session.query(ShopPreparation.order_id).filter(
+                ShopPreparation.order_id == ShopOrder.id).exists()
+            condition = and_(condition, prepared if group == 'ready' else ~prepared)
+        return condition
+
+    def search_orders(query, search):
+        # Search a separator-delimited string so each whitespace-delimited token
+        # can match any requested field. SQL escaping treats %, _ and / literally.
+        fields = [ShopOrder.reference] + [ShopOrder.contact[key].as_string() for key in
+            ('first_name', 'last_name', 'email', 'phone')] + [User.username, cast(User.telegram_id, String)]
+        searchable = func.coalesce(fields[0], '')
+        for field in fields[1:]:
+            searchable = searchable + '\n' + func.coalesce(field, '')
+        # Portable accent folding: no database extension or schema migration.
+        accents = 'àâäáãåçéèêëìíîïñòóôöõùúûüýÿœæ'
+        replacements = ('a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e',
+            'i', 'i', 'i', 'i', 'n', 'o', 'o', 'o', 'o', 'o', 'u', 'u', 'u', 'u', 'y', 'y', 'oe', 'ae')
+        for accented, plain in zip(accents, replacements):
+            for value in (accented, accented.upper()):
+                searchable = func.replace(searchable, value, plain)
+                search = search.replace(value, plain)
+        searchable = func.lower(searchable)
+        query = query.outerjoin(User, User.id == ShopOrder.user_id)
+        for token in dict.fromkeys(search.lower().split()):
+            if token.startswith('@') and len(token) > 1:
+                token = token[1:]
+            query = query.filter(searchable.contains(token, autoescape=True))
+        return query
+
+    @app.get("/api/shop/admin/orders/summary")
+    def admin_orders_summary():
+        if not require_admin():
+            return fail("Interdit", 403)
+        groups = ('payments', 'preparing', 'ready', 'shipping')
+        row = db.session.query(*[func.coalesce(func.sum(case((order_group_filter(group), 1), else_=0)), 0)
+                                 for group in groups]).select_from(ShopOrder).one()
+        return jsonify(counts={group: int(count) for group, count in zip(groups, row)})
+
+    @app.get("/api/shop/admin/orders")
+    def admin_orders():
+        if not require_admin():
+            return fail("Interdit", 403)
+        group = request.args.get('group')
+        search = request.args.get('q', '')
+        if len(search) > 100 or any(unicodedata.category(char) in ('Cc', 'Cf', 'Cs') for char in search):
+            return fail('Recherche invalide : 100 caractères maximum, sans caractère de contrôle')
+        try:
+            limit = int(request.args.get('limit', '50'))
+        except (TypeError, ValueError):
+            return fail('Taille de page invalide')
+        if not 1 <= limit <= 50:
+            return fail('Taille de page invalide')
+        query = ShopOrder.query.filter(ShopOrder.status != "deleted")
+        if group is not None and group != 'all':
+            try:
+                query = query.filter(order_group_filter(group))
+            except ValueError as exc:
+                return fail(str(exc))
+        if search.strip():
+            query = search_orders(query, search.strip())
+        before = request.args.get('before', type=int)
+        if before:
+            query = query.filter(ShopOrder.id < before)
+        row_limit = limit + 1 if group else (limit if 'limit' in request.args else 200)
+        orders = query.order_by(ShopOrder.id.desc()).limit(row_limit).all()
+        if group:
+            return jsonify(orders=[serialize(o, True) for o in orders[:limit]],
+                           next_before=orders[limit - 1].id if len(orders) > limit else None)
+        return jsonify([serialize(o, True) for o in orders])
+
+    def can_delete_order(order):
+        return (order.status in ("awaiting_payment", "expired", "cancelled")
+                and not is_gift_order(order) and not order.points
+                and not ShopPayment.query.filter_by(order_id=order.id).first()
+                and not ShopPaymentRecord.query.filter_by(order_id=order.id).first()
+                and not ConfirmedOrderEvent.query.filter_by(external_order_id=order.reference).first()
+                and not ReferralOrderEvent.query.filter_by(external_order_id=order.reference).first())
+
+    @app.post("/api/shop/admin/orders/<reference>/delete")
+    def delete_admin_order(reference):
+        if not require_admin():
+            return fail("Interdit", 403)
+        try:
+            # Serialize against confirmations and callbacks without relying on
+            # SELECT FOR UPDATE, which SQLite ignores.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference).values(status=ShopOrder.status),
+                execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            if order.status == "deleted":
+                db.session.commit()
+                return jsonify(ok=True, duplicate=True)
+            if not can_delete_order(order):
+                return fail("Seules les commandes non payées peuvent être supprimées.", 409)
+            now = int(time.time())
+            if order.sync_lease_until > now or ShopOutbox.query.filter(
+                    ShopOutbox.order_id == order.id, ShopOutbox.lease_until > now).first():
+                return fail("Une synchronisation est en cours. Réessayez dans quelques instants.", 409)
+            # Retain the identity and payment nonce: a delayed signed payment
+            # must still become payment_review, never disappear with its order.
+            if order.stock_reserved:
+                inventory=app.extensions.get("cosmetic_inventory")
+                if inventory:inventory["release"](order)
+                for line in inventory_lines(order.lines):
+                    db.session.execute(update(Product).where(Product.id == line["product_id"]).values(
+                        stock=Product.stock + line["quantity"]))
+            if order.reward_reserved:
+                db.session.execute(update(User).where(User.id == order.user_id).values(
+                    loyalty_points=User.loyalty_points + order.reward_points))
+            order.stock_reserved = False
+            order.reward_reserved = False
+            order.status = "deleted"
+            # Cancel undelivered notifications; retain their idempotency keys.
+            ShopOutbox.query.filter(ShopOutbox.order_id == order.id,
+                ShopOutbox.state != "done").update(
+                    {"state": "done", "lease_until": 0, "lease_token": None,
+                     "last_error": "order_deleted"}, synchronize_session=False)
+            enqueue(order, "deleted", recipients=[])  # Update the existing Sheets row only.
+            db.session.commit()
+            return jsonify(ok=True)
+        except SQLAlchemyError:
+            return fail("Suppression temporairement indisponible. Réessayez.", 503)
+
+    @app.get("/api/shop/admin/orders/<reference>")
+    def admin_order_detail(reference):
+        if not require_admin():
+            return fail("Interdit", 403)
+        order = ShopOrder.query.filter_by(reference=reference).first()
+        if not order:
+            return fail("Commande introuvable", 404)
+        return jsonify(order=serialize(order, True))
+
+    @app.post("/api/shop/admin/orders/<reference>/private-note")
+    def update_private_note(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail("Données invalides")
+        text, revision = payload.get('text'), payload.get('expected_revision')
+        if (not isinstance(text, str) or len(text) > 2000 or
+                any(unicodedata.category(char) in ('Cc', 'Cf', 'Cs') and char not in '\r\n' for char in text)):
+            return fail("Note invalide : 2 000 caractères maximum")
+        if type(revision) is not int or not 0 <= revision < 2 ** 31:
+            return fail("Version de la note invalide. Actualisez la commande.")
+        text = text.replace('\r\n', '\n').replace('\r', '\n').strip()
+        try:
+            # Lock the existing order without changing its values. Competing
+            # edits then check the most recent committed note before appending.
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            latest = ShopPrivateNote.query.filter_by(order_id=order.id).order_by(
+                ShopPrivateNote.revision.desc()).first()
+            current_revision = latest.revision if latest else 0
+            if current_revision != revision:
+                if (current_revision == revision + 1 and latest.text == text and
+                        latest.updated_by_telegram_id == admin.telegram_id):
+                    db.session.commit()
+                    return jsonify(order=serialize(order, True), duplicate=True)
+                return fail("La note a été modifiée entre-temps. Actualisez la commande avant de réessayer.", 409)
+            if text == (latest.text if latest else ''):
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            db.session.add(ShopPrivateNote(order_id=order.id, revision=current_revision + 1, text=text,
+                updated_at=int(time.time()), updated_by_telegram_id=admin.telegram_id))
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Enregistrement de la note indisponible ; réessayez", 503)
+
+    @app.post("/api/shop/admin/orders/<reference>/confirm-payment")
+    def confirm_payment(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail('Données invalides')
+        try:
+            # Serialize with expiry, callbacks and other administrators before
+            # rereading reservation flags. A lost response can then be retried.
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            if is_gift_order(order):
+                return fail("Cette commande cadeau ne nécessite aucune validation de paiement", 409)
+            if type(payload.get("confirmed_total_cents")) is not int or payload["confirmed_total_cents"] != order.total_cents:
+                return fail("Vérifiez le montant total payé en euros avant validation")
+            try:
+                note = payment_note(payload)
+            except ValueError as exc:
+                return fail(str(exc))
+            previous = payment_record(order)
+            method = payload.get("payment_method")
+            if "payment_method" in payload and (not isinstance(method, str) or method not in PAYMENT_METHODS):
+                return fail("Choisissez le moyen de paiement réellement utilisé")
+            if order.status in PAID_STATUSES:
+                # Confirmation never doubles as an edit of an already paid order.
+                # Retrying the original confirmation after an administrative edit
+                # still returns its current state, without overwriting that edit.
+                confirmed = ShopPaymentRecord.query.filter_by(order_id=order.id, source="admin_confirmation").first()
+                same = (confirmed.note == note and (method is None or confirmed.method == method)) if confirmed else (
+                    order.payment_note == note and (method is None or previous["method"] == method))
+                if not same:
+                    return fail("Cette commande est déjà payée. Utilisez « Modifier le moyen de paiement ».", 409)
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            if order.status not in ("awaiting_payment", "payment_review", "expired"):
+                return fail("Cette commande ne peut pas être validée comme payée", 409)
+            if method is None:
+                if order.status != "payment_review":
+                    return fail("Choisissez le moyen de paiement réellement utilisé", 409)
+                # Preserve compatibility with the existing review form. An absent
+                # proof is never presented as a verified crypto transaction.
+                method = previous["method"]
+            changed = db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id,
+                ShopOrder.status.in_(("awaiting_payment", "payment_review", "expired"))).values(
+                    status="paid"), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("La commande a changé. Actualisez avant de valider le paiement.", 409)
+            db.session.refresh(order)
+            inventory=app.extensions.get("cosmetic_inventory")
+            if inventory:inventory["ensure"](order)
+            if not order.stock_reserved:
+                for line in inventory_lines(order.lines):
+                    changed = db.session.execute(update(Product).where(Product.id == line["product_id"], Product.stock >= line["quantity"]).values(stock=Product.stock - line["quantity"])).rowcount
+                    if changed != 1:
+                        return fail("Paiement tardif : stock insuffisant, traitement manuel nécessaire", 409)
+                order.stock_reserved = True
+            if order.reward_points and not order.reward_reserved:
+                changed = db.session.execute(update(User).where(User.id == order.user_id, User.loyalty_points >= order.reward_points).values(loyalty_points=User.loyalty_points - order.reward_points)).rowcount
+                if changed != 1:
+                    return fail("Paiement tardif : les points de la récompense ne sont plus disponibles", 409)
+                order.reward_reserved = True
+            order.payment_note = note
+            add_payment_record(order, method, note, admin, "admin_confirmation", previous)
+            credit_order(order)
+            enqueue(order, "paid")
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except ValueError as exc:
+            return fail(str(exc), 409)
+        except SQLAlchemyError:
+            return fail("Validation indisponible ; aucun point crédité partiellement", 503)
+
+    @app.post("/api/shop/admin/orders/<reference>/payment-method")
+    def correct_payment_method(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail("Données invalides")
+        method, revision = payload.get("payment_method"), payload.get("expected_revision")
+        if not isinstance(method, str) or method not in PAYMENT_METHODS:
+            return fail("Choisissez le moyen de paiement réellement utilisé")
+        if type(revision) is not int or revision < 0:
+            return fail("Version du paiement invalide. Actualisez la commande.")
+        try:
+            note = payment_note(payload)
+        except ValueError as exc:
+            return fail(str(exc))
+        try:
+            locked = db.session.execute(update(ShopOrder).where(ShopOrder.reference == reference).values(
+                status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not locked:
+                return fail("Commande introuvable", 404)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            if is_gift_order(order) or order.status not in PAID_STATUSES:
+                return fail("Seul le moyen de paiement d’une commande payée peut être corrigé", 409)
+            previous = payment_record(order)
+            if previous["revision"] != revision:
+                if (previous["revision"] == revision + 1 and previous["source"] == "admin_correction"
+                        and previous["method"] == method and previous["note"] == note
+                        and previous["recorded_by_telegram_id"] == admin.telegram_id):
+                    db.session.commit()
+                    return jsonify(order=serialize(order, True), duplicate=True)
+                return fail("Le paiement a été modifié entre-temps. Actualisez la commande avant de réessayer.", 409)
+            if previous["method"] == method and previous["note"] == note:
+                db.session.commit()
+                return jsonify(order=serialize(order, True), duplicate=True)
+            add_payment_record(order, method, note, admin, "admin_correction", previous)
+            # Keep the original confirmation note/proofs, accounting date, stock,
+            # rewards and notification outbox unchanged by this metadata correction.
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Modification du moyen de paiement indisponible ; réessayez", 503)
+
+    @app.post("/api/shop/admin/orders/<reference>/preparation")
+    def update_preparation(reference):
+        admin = require_admin()
+        if not admin:
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or type(payload.get("prepared")) is not bool:
+            return fail("État de préparation invalide")
+        try:
+            # Serialize preparation with the existing conditional shipment update.
+            # A waiting request must recheck that the order is still paid.
+            changed = db.session.execute(update(ShopOrder).where(
+                ShopOrder.reference == reference, ShopOrder.status.in_(("paid", "gifted"))
+            ).values(status=ShopOrder.status), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                if not ShopOrder.query.filter_by(reference=reference).first():
+                    return fail("Commande introuvable", 404)
+                return fail("Seules les commandes payées ou offertes non expédiées peuvent être préparées", 409)
+            order = ShopOrder.query.filter_by(reference=reference).populate_existing().one()
+            preparation = ShopPreparation.query.filter_by(order_id=order.id).populate_existing().first()
+            if payload["prepared"] and preparation is None:
+                db.session.add(ShopPreparation(order_id=order.id, prepared_at=int(time.time()),
+                                               prepared_by_telegram_id=admin.telegram_id))
+            elif not payload["prepared"] and preparation is not None:
+                db.session.delete(preparation)
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Préparation indisponible ; réessayez", 503)
+
+    @app.post("/api/shop/admin/orders/<reference>/shipping")
+    def update_shipping(reference):
+        if not require_admin():
+            return fail("Interdit", 403)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return fail('Données invalides')
+        status, number = payload.get("status"), payload.get("tracking_number", "")
+        if status not in ("shipped", "available", "delivered") or not isinstance(number, str) or not re.fullmatch(r"[A-Za-z0-9-]{4,64}", number):
+            return fail("Statut ou numéro de suivi invalide")
+        order = ShopOrder.query.filter_by(reference=reference).first()
+        if not order:
+            return fail("Commande introuvable", 404)
+        allowed = {"shipped": ("paid", "gifted"), "available": ("shipped",), "delivered": ("shipped", "available")}
+        try:
+            if order.status == status and order.tracking_number == number:
+                return jsonify(order=serialize(order, True), duplicate=True)
+            changed = db.session.execute(update(ShopOrder).where(ShopOrder.id == order.id, ShopOrder.status.in_(allowed[status])).values(status=status, tracking_number=number), execution_options={"synchronize_session": False}).rowcount
+            if not changed:
+                return fail("Cette transition de livraison n’est pas possible", 409)
+            db.session.refresh(order)
+            enqueue(order, status)
+            db.session.commit()
+            return jsonify(order=serialize(order, True))
+        except SQLAlchemyError:
+            return fail("Mise à jour indisponible", 503)
+
+    @app.cli.command("shop-expire")
+    def expire_command():
+        click.echo(f"{expire_orders()} réservations expirées")
+
+    app.extensions["nyx_shop"] = {"Order": ShopOrder, "Payment": ShopPayment, "Profile": ShopProfile,
+        "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation, "PaymentRecord": ShopPaymentRecord,
+        "PrivateNote": ShopPrivateNote,
+        "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
+        "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order,
+        "config": config, "payment_link": payment_link}
+    return app.extensions["nyx_shop"]
+
+
+
+
+

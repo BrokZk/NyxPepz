@@ -1,0 +1,294 @@
+"""Durable delivery of order notifications and Google Sheets mirrors.
+
+The worker is an explicit server command, never a browser-triggered side effect.
+"""
+import json
+import os
+import re
+import secrets
+import time
+from urllib.parse import quote
+
+import click
+import requests
+from sqlalchemy import or_, update
+
+HEADERS = ["Commande", "Créée le (UTC)", "Statut", "Telegram ID", "Pseudo Telegram", "Prénom", "Nom",
+           "Email", "Téléphone", "Adresse", "Complément", "Code postal", "Ville", "Pays", "Origine",
+           "Articles", "Produits EUR", "Livraison EUR", "Total EUR", "Points gagnés", "Numéro de suivi", "Réduction EUR", "Points utilisés"]
+
+
+def install_delivery(app, db, User, shop):
+    from bot_launcher import install_launcher
+    launcher_tick = install_launcher(app, db)
+    shop['launcher_tick'] = launcher_tick
+    Order, Outbox = shop["Order"], shop["Outbox"]
+
+    def is_gift_order(order):
+        gifts = app.extensions.get('nyx_gifts', {})
+        check = shop.get('is_gift_order') or gifts.get('is_gift_order')
+        if callable(check):
+            return bool(check(order))
+        return bool(getattr(order, 'is_gift', False) or order.status == 'gifted')
+
+    def sheets_session():
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import AuthorizedSession
+        path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "/etc/secrets/google-service-account.json")
+        credentials = service_account.Credentials.from_service_account_file(path, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        return AuthorizedSession(credentials)
+
+    def sheet_write(order):
+        spreadsheet = os.environ.get("GOOGLE_SHEET_ID", "")
+        if not spreadsheet:
+            raise RuntimeError("Google Sheets non configuré")
+        client = sheets_session()
+        base = "https://sheets.googleapis.com/v4/spreadsheets/" + quote(spreadsheet, safe='')
+        title = "App_Commandes"
+        metadata = client.get(base, params={"fields": "sheets.properties"}, timeout=20)
+        metadata.raise_for_status()
+        sheets = {s["properties"]["title"]: s["properties"] for s in metadata.json().get("sheets", [])}
+        if title not in sheets:
+            response = client.post(base + ':batchUpdate', json={"requests": [{"addSheet": {"properties": {"title": title, "gridProperties": {"rowCount": max(1000, order.id + 10), "columnCount": len(HEADERS)}}}}]}, timeout=20)
+            if not response.ok:
+                # A concurrent worker may have just created the sheet.
+                metadata = client.get(base, params={"fields": "sheets.properties"}, timeout=20)
+                metadata.raise_for_status()
+                sheets = {s["properties"]["title"]: s["properties"] for s in metadata.json().get("sheets", [])}
+                if title not in sheets:
+                    response.raise_for_status()
+        elif sheets[title].get("gridProperties", {}).get("rowCount", 0) <= order.id:
+            response = client.post(base + ':batchUpdate', json={"requests": [{"appendDimension": {"sheetId": sheets[title]["sheetId"], "dimension": "ROWS", "length": 1000}}]}, timeout=20)
+            response.raise_for_status()
+        header_url = base + '/values/' + quote("'App_Commandes'!A1:W1", safe='')
+        existing = client.get(header_url, timeout=20)
+        existing.raise_for_status()
+        header = existing.json().get("values", [])
+        if header and header[0] != HEADERS:
+            raise RuntimeError("En-têtes App_Commandes modifiés : vérifier avant synchronisation")
+        if not header:
+            response = client.put(header_url, params={"valueInputOption": "RAW"}, json={"values": [HEADERS]}, timeout=20)
+            response.raise_for_status()
+        # Fixed database-derived rows are idempotent even after a network timeout.
+        # This dedicated tab must not be reordered or used by the old bot.
+        row = order.id + 1
+        target = base + '/values/' + quote(f"'App_Commandes'!A{row}:W{row}", safe='')
+        existing = client.get(target, timeout=20)
+        existing.raise_for_status()
+        occupied = existing.json().get("values", [])
+        if occupied and occupied[0] and occupied[0][0] != order.reference:
+            raise RuntimeError("Ligne occupée par une autre commande : synchronisation arrêtée")
+        user = db.session.get(User, order.user_id)
+        from datetime import datetime, timezone
+        c = order.contact
+        gift = is_gift_order(order)
+        sheet_status = order.status
+        if gift:
+            progress = {'shipped': 'expédiée', 'available': 'disponible au retrait', 'delivered': 'livrée',
+                        'cancelled': 'annulée'}.get(order.status)
+            sheet_status = 'offerte' + (' · ' + progress if progress else '')
+        data = [order.reference, datetime.fromtimestamp(order.created_at, timezone.utc).isoformat(), sheet_status,
+                str(user.telegram_id), user.username or "", c["first_name"], c["last_name"], c["email"], c["phone"],
+                c["address"], c["address_extra"], c["postal_code"], c["city"], c["country"], c["discovery"],
+                " | ".join(f"{x['quantity']} × {x['name']} {x['format']} ({x['unit_cents']/100:.2f} €)" for x in order.lines),
+                order.subtotal_cents / 100, order.shipping_cents / 100, order.total_cents / 100, order.points, order.tracking_number or "", order.discount_cents / 100, order.reward_points]
+        response = client.put(target, params={"valueInputOption": "RAW"}, json={"values": [data]}, timeout=20)
+        response.raise_for_status()
+
+    def telegram_send(order, job):
+        cosmetics = bool(order.lines) and all(line.get("kind") == "cosmetic" for line in order.lines)
+        customer = job.kind.startswith('client_')
+        if cosmetics and customer and job.kind == "client_created":
+            # The shop bot already sends the checkout/payment message.
+            return "cosmetics_checkout_message"
+        token_key = "NYXPEPZ_CATALOG_BOT_TOKEN" if cosmetics else "TELEGRAM_BOT_TOKEN"
+        token = os.environ.get(token_key, "")
+        if not token:
+            raise RuntimeError("Bot Telegram non configuré")
+        customer = job.kind.startswith('client_')
+        event = job.kind.split('_', 1)[1]
+        cosmetics = bool(order.lines) and all(line.get("kind")=="cosmetic" for line in order.lines)
+        notifier = app.extensions.get("cosmetics_admin_notice")
+        if cosmetics and not customer and notifier:
+            # Convert any older queued admin alert to the private minimal message.
+            notifier(order,event)
+            db.session.commit()
+            return None
+        messages = {"created": "Nouvelle commande reçue — en attente de paiement", "paid": "Commande payée et validée",
+                    "shipped": "Votre colis a été expédié", "available": "Votre colis est disponible au point de retrait / locker",
+                    "delivered": "Colis livré", "expired": "Réservation expirée", "cancelled": "Commande annulée",
+                    "payment_help": "Autre moyen de paiement demandé"}
+        heading = messages.get(event, "Paiement reçu — montant à vérifier" if event.startswith('payment_received') else event)
+        if customer and event == "created":
+            heading = "Votre commande est enregistrée — paiement en attente"
+        gift = is_gift_order(order)
+        if gift:
+            gift_messages = {
+                'created': 'Votre cadeau est enregistré — préparation en cours' if customer else 'Commande cadeau enregistrée — offerte',
+                'gifted': 'Votre cadeau est enregistré — préparation en cours' if customer else 'Commande cadeau enregistrée — offerte',
+                'paid': 'Votre cadeau est confirmé — préparation en cours' if customer else 'Commande cadeau confirmée — offerte',
+                'shipped': 'Votre cadeau a été expédié' if customer else 'Cadeau expédié',
+                'available': 'Votre cadeau est disponible au point de retrait / locker' if customer else 'Cadeau disponible au retrait',
+                'delivered': 'Votre cadeau a été livré' if customer else 'Cadeau livré',
+                'cancelled': 'Commande cadeau annulée',
+            }
+            heading = gift_messages.get(event, 'Mise à jour de votre cadeau' if customer else 'Mise à jour de la commande cadeau')
+        if event == "payment_help" and not gift:
+            # Delivery may happen after payment, cancellation or expiry. Describe
+            # the current order without suggesting that this old request renews
+            # a reservation or reverses a payment already validated.
+            help_status = {
+                "awaiting_payment": "À recontacter — paiement non confirmé",
+                "payment_review": "À recontacter — paiement reçu, validation en attente",
+                "expired": "Réservation expirée — aucune réservation active",
+                "cancelled": "Commande annulée — aucune réservation active",
+            }.get(order.status, "Demande de contact enregistrée — statut à vérifier")
+            if order.status in ("paid", "shipped", "available", "delivered"):
+                help_status = "Demande antérieure — paiement validé depuis"
+            heading += "\n" + help_status
+        if customer and event == 'shipped':
+            thanks = ('Merci pour votre confiance en NyxPepz !' if gift
+                      else 'Merci d’avoir commandé chez NyxPepz !')
+            heading += ('\n\n' + thanks
+                        + '\nVotre colis est en route vers votre point relais ou votre locker.'
+                        + '\nSurveillez vos e-mails : Mondial Relay vous enverra une notification '
+                          'dès qu’il sera disponible au retrait.\n')
+        text = f"{heading}\n{order.reference}\nTotal : {order.total_cents / 100:.2f} €"
+        if gift:
+            text += '\nProduits et livraison offerts.'
+        contact_url = None
+        contact_details = None
+        if not customer:
+            user = db.session.get(User, order.user_id)
+            username = user.username if user and isinstance(user.username, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", user.username) else None
+            text += '\nClient : ' + order.contact['first_name'] + ' ' + order.contact['last_name']
+            if username:
+                text += ' (@' + username + ')'
+            contact_details = '\nTéléphone : ' + order.contact['phone'] + '\nEmail : ' + order.contact['email']
+            if user:
+                contact_details += '\nTelegram ID : ' + str(user.telegram_id)
+                contact_url = 'https://t.me/' + username if username else 'tg://user?id=' + str(user.telegram_id)
+            if event == "payment_help":
+                # Put contact details before long baskets so they remain visible.
+                text += contact_details
+        text += '\n' + '\n'.join(f"{x['quantity']} × {x['name']} {x['format']}" for x in order.lines)
+        if order.tracking_number:
+            text += '\nNuméro de suivi : ' + order.tracking_number
+        payload = {"chat_id": job.recipient, "text": text[:3900]}
+        if customer and cosmetics and order.tracking_number:
+            from mondial_tracking import mondial_tracking_url
+            payload["reply_markup"]={"inline_keyboard":[[{"text":"📦 Mondial Relay",
+                "url":mondial_tracking_url(order.tracking_number,order.contact.get("postal_code",""))}]]}
+        if contact_url:
+            payload["reply_markup"] = {"inline_keyboard": [[{"text": "Contacter le client", "url": contact_url}]]}
+        response = requests.post('https://api.telegram.org/bot' + token + '/sendMessage', json=payload, timeout=20)
+        if contact_url and contact_url.startswith('tg://') and response.status_code == 400:
+            try:
+                description = str(response.json().get('description', '')).lower()
+            except (ValueError, AttributeError):
+                description = ''
+            rejected_contact = any(reason in description for reason in (
+                'button_user_invalid', 'entity_mention_user_invalid', 'button_url_invalid', 'user not found'
+            )) or ('button' in description and ('url' in description or 'user' in description))
+            if rejected_contact:
+                # Some Telegram profiles cannot be linked by ID. A rejected
+                # request sent nothing, so retry once without the contact button.
+                # Keep phone/email available; errors are handled by the outbox.
+                fallback = {key: value for key, value in payload.items() if key != 'reply_markup'}
+                if event != 'payment_help':
+                    fallback['text'] = text[:3900 - len(contact_details)] + contact_details
+                response = requests.post('https://api.telegram.org/bot' + token + '/sendMessage', json=fallback, timeout=20)
+        if customer and response.status_code == 403:
+            # Customer blocked the bot or has not granted write access. Do not
+            # retry forever; the order remains available in their app profile.
+            return "client_unreachable"
+        response.raise_for_status()
+        if not response.json().get("ok"):
+            raise RuntimeError("Telegram a refusé le message")
+        return None
+
+    def run_jobs(limit=30):
+        now = int(time.time())
+        candidates = [r.id for r in Outbox.query.filter(Outbox.state != 'done', Outbox.next_attempt <= now,
+            Outbox.lease_until <= now).order_by(Outbox.id).limit(limit)]
+        db.session.commit()
+        processed = 0
+        for job_id in candidates:
+            token = secrets.token_hex(20)
+            changed = db.session.execute(update(Outbox).where(Outbox.id == job_id, Outbox.state != 'done',
+                Outbox.lease_until <= int(time.time())).values(lease_until=int(time.time()) + 600, lease_token=token, state='working')) .rowcount
+            db.session.commit()
+            if not changed:
+                continue
+            job = db.session.get(Outbox, job_id)
+            order = db.session.get(Order, job.order_id)
+            # Serialize external writes for one order so an older Sheets
+            # snapshot cannot overwrite a newer status from another worker.
+            order_lock = db.session.execute(update(Order).where(Order.id == order.id,
+                Order.sync_lease_until <= int(time.time())).values(sync_lease_until=int(time.time())+600, sync_lease_token=token)).rowcount
+            if not order_lock:
+                db.session.execute(update(Outbox).where(Outbox.id == job_id, Outbox.lease_token == token).values(state='pending', lease_until=0, lease_token=None))
+                db.session.commit()
+                continue
+            db.session.commit()
+            db.session.refresh(order)
+            try:
+                note = None
+                if job.kind == 'sheets':
+                    sheet_write(order)
+                elif order.status == 'deleted':
+                    note = 'order_deleted'
+                else:
+                    note = telegram_send(order, job)
+                db.session.execute(update(Outbox).where(Outbox.id == job_id, Outbox.lease_token == token).values(
+                    state='done', lease_until=0, lease_token=None, last_error=note))
+                db.session.execute(update(Order).where(Order.id == order.id, Order.sync_lease_token == token).values(sync_lease_until=0, sync_lease_token=None))
+                db.session.commit()
+                processed += 1
+            except Exception as exc:
+                db.session.rollback()
+                job = db.session.get(Outbox, job_id)
+                attempts = job.attempts + 1
+                # Do not log HTTP URLs: Telegram URLs contain the bot secret.
+                db.session.execute(update(Outbox).where(Outbox.id == job_id, Outbox.lease_token == token).values(
+                    state='pending', lease_until=0, lease_token=None, attempts=attempts,
+                    next_attempt=int(time.time()) + min(3600, 15 * (2 ** min(attempts, 8))),
+                    last_error=type(exc).__name__))
+                db.session.execute(update(Order).where(Order.id == order.id, Order.sync_lease_token == token).values(sync_lease_until=0, sync_lease_token=None))
+                db.session.commit()
+        return processed
+
+    @app.cli.command('shop-dispatch')
+    @click.option('--loop', is_flag=True, help='Worker continu : traiter les notifications et synchroniser Sheets.')
+    def dispatch(loop):
+        import signal
+        import threading
+        stop = threading.Event()
+        if loop:
+            signal.signal(signal.SIGTERM, lambda *_: stop.set())
+            signal.signal(signal.SIGINT, lambda *_: stop.set())
+        while not stop.is_set():
+            shop['expire']()
+            count = run_jobs()
+            giveaway_dispatch = app.extensions.get('nyx_giveaway_delivery', {}).get('run_jobs')
+            if giveaway_dispatch:
+                try:
+                    count += giveaway_dispatch()
+                except Exception:
+                    # Keep shop notifications running if the giveaway queue is unavailable.
+                    db.session.rollback()
+                    app.logger.warning('Envoi des résultats du concours temporairement indisponible')
+            if loop:
+                launcher_tick()
+            if not loop:
+                click.echo(f'{count} envois traités')
+                return
+            stop.wait(10)
+
+    shop['run_jobs'] = run_jobs
+    shop['sheet_write'] = sheet_write
+    shop['telegram_send'] = telegram_send
+
+
+
+
