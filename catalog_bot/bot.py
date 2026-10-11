@@ -62,7 +62,7 @@ def screen(action, catalog, user, store):
     selected = store.titles(user_id)
     back = [button("‹ Retour", "menu")]
     if action == "menu":
-        return "🌙 Bienvenue chez NyxPepz !\n\nConsultez les fiches et conservez celles qui vous intéressent dans votre panier documentaire.\n\n" + NOTICE, menu(catalog)
+        return "🌙 Bienvenue chez NyxPepz !\n\nRetrouvez ici notre catalogue et découvrez les fiches de nos produits.\n\n🛍 Voir les produits\n👤 Consulter mon profil\n🛒 Mon Panier", menu(catalog)
     if action == "catalog":
         rows = [[button(item["title"], f"info:{i}")] for i, item in enumerate(catalog)]
         return "🛍 Voir les produits\n\nChoisissez une fiche informative.", {"inline_keyboard": rows + [back]}
@@ -200,3 +200,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("Catalogue arrêté.")
+
