@@ -572,6 +572,9 @@ install_delivery(app, db, User, shop)
 from shop_inventory import install_inventory
 install_inventory(app, db, Product, CatalogUpdate, shop)
 
+from cosmetics_checkout import install_cosmetics_checkout
+cosmetics_checkout = install_cosmetics_checkout(app, db, User, new_code, shop)
+
 with app.app_context():
  db.create_all()
  protocols['migrate']()
@@ -686,3 +689,4 @@ with app.app_context():
  apply_accessory_catalog_update()
 
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
+

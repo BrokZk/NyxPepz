@@ -580,8 +580,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             return fail("Impossible d’enregistrer la demande de rappel. Réessayez.", 503)
 
     @app.post("/api/shop/orders/<reference>/pay")
-    def payment_link(reference):
-        user = current_user()
+    def payment_link(reference, user=None):
+        user = user or current_user()
         if not user:
             return fail("Non authentifié", 401)
         if not enabled() or not paygate_ready():
@@ -1081,6 +1081,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         "Outbox": ShopOutbox, "Loyalty": ShopLoyalty, "Preparation": ShopPreparation, "PaymentRecord": ShopPaymentRecord,
         "PrivateNote": ShopPrivateNote,
         "serialize": serialize, "expire": expire_orders, "parse_contact": parse_contact,
-        "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order}
+        "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order,
+        "config": config, "payment_link": payment_link}
     return app.extensions["nyx_shop"]
+
 

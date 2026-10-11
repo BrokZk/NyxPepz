@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>NyxPepz — Coordonnées de livraison</title>
+  <link rel="stylesheet" href="/static/cosmetics-contact.css?v=1">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/static/cosmetics-contact.js?v=1" defer></script>
+</head>
+<body>
+<main>
+  <header><p class="brand">🌙 NyxPepz</p><p class="eyebrow">VOTRE COMMANDE</p><h1>Vos coordonnées</h1><p>Renseignez votre adresse pour recevoir vos cosmétiques.</p></header>
+  <p id="message" role="status" aria-live="polite">Ouverture de votre panier…</p>
+  <form id="contactForm" hidden>
+    <fieldset id="fields">
+      <legend>Adresse de livraison</legend>
+      <div class="two">
+        <label>Prénom<input name="first_name" autocomplete="given-name" maxlength="80" required></label>
+        <label>Nom<input name="last_name" autocomplete="family-name" maxlength="80" required></label>
+      </div>
+      <label>Adresse postale<input name="address" autocomplete="address-line1" maxlength="180" required></label>
+      <label>Complément d'adresse <span>(facultatif)</span><input name="address_extra" autocomplete="address-line2" maxlength="120"></label>
+      <div class="two">
+        <label>Ville<input name="city" autocomplete="address-level2" maxlength="90" required></label>
+        <label>Code postal<input name="postal_code" autocomplete="postal-code" inputmode="numeric" maxlength="12" required></label>
+      </div>
+      <label>Pays<select name="country" autocomplete="country" required></select></label>
+      <label>Téléphone<input type="tel" name="phone" autocomplete="tel" maxlength="30" placeholder="+33…" required></label>
+      <label>Adresse email<input type="email" name="email" autocomplete="email" maxlength="180" required></label>
+    </fieldset>
+    <section class="summary" aria-labelledby="summaryHeading">
+      <h2 id="summaryHeading">Votre récapitulatif</h2>
+      <ul id="lines"></ul>
+      <dl><div><dt>Produits</dt><dd id="subtotal"></dd></div><div><dt>Livraison</dt><dd id="shipping"></dd></div><div class="total"><dt>Total</dt><dd id="total"></dd></div></dl>
+      <p id="points"></p>
+    </section>
+    <p class="privacy">Vos coordonnées sont enregistrées dans votre compte NyxPepz pour traiter cette commande et sa livraison. Elles sont accessibles à l'administration et utilisées par le prestataire de paiement lorsque nécessaire.</p>
+    <label class="check"><input type="checkbox" id="accepted" required><span>Je confirme mes coordonnées et le montant de cette commande.</span></label>
+    <button class="primary" id="submit" type="submit">Enregistrer et recevoir mon lien de paiement →</button>
+    <button id="refresh" type="button">Actualiser le récapitulatif</button>
+  </form>
+  <section id="success" hidden><h2>Votre commande est enregistrée</h2><p id="reference"></p><p>Retrouvez le lien de paiement dans NyxPepzShopBot. Si son envoi tarde, utilisez « Recevoir le lien de paiement » dans le bot.</p><button class="primary" id="backBot">Retour au bot</button></section>
+  <footer>NyxPepz · Coordonnées client</footer>
+</main>
+</body>
+</html>
