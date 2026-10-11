@@ -56,6 +56,15 @@ function goBack(){
 $$('.page:not(#home)').forEach(page=>{const back=document.createElement('button');back.type='button';back.className='page-back';back.textContent='‹ Retour';back.setAttribute('aria-label','Revenir en arrière');back.onclick=goBack;page.prepend(back);});
 document.body.classList.add('has-page-back');
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+function openShopBot(){
+ const url="https://t.me/NyxPepzShopBot";
+ const webApp=window.Telegram?.WebApp;
+ if(typeof webApp?.openTelegramLink==="function"){
+  try{webApp.openTelegramLink(url);return;}catch{}
+ }
+ window.location.assign(url);
+}
+$$("[data-shop-bot]").forEach(b=>b.onclick=openShopBot);
 const meta={"Perte de graisse":["◯","Un corps plus sain, une meilleure sensibilité"],"Régénération":["♧","Des tissus plus forts, une récupération accélérée"],"Beauté · peau":["♙","Un éclat naturel, une régénération visible"],"Nootropiques":["◇","Clarté, concentration et équilibre"],"Performance":["ϟ","Performance et vitalité"],"Longévité":["∞","Longévité / Anti-âge"],"Libido":["♡","Bien-être et vitalité"]};
 function vial(p){
  if(p.image_url==='/static/protocols/amino-pack-original.png')return `<div class="product-photo accessory-photo"><svg viewBox="665 255 647 415" role="img" aria-label="10 seringues et 10 tampons alcool"><image href="/static/protocols/amino-pack-original.png" width="1312" height="1199"/></svg></div>`;
@@ -340,4 +349,5 @@ async function editPackComposition(id){
  await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
  }catch(e){toast(e.message);}
 }
+
 
