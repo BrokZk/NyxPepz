@@ -100,6 +100,7 @@ def admin_screen(action, user, store):
         return "⚙️ Admin — catalogue de cosmétiques", {"inline_keyboard": [
             [button("＋ Ajouter un produit", "admin:new")],
             [button("Modifier / supprimer", "admin:list")],
+            [button("📦 Gérer les stocks", "stock:list")],
             [button("🎛 Boutons et catégories", "ui:menu")],
             [button("‹ Retour", "menu")],
         ]}
@@ -131,6 +132,7 @@ def admin_screen(action, user, store):
             return "Supprimer " + item[1] + " ?", {"inline_keyboard": [[button("Confirmer la suppression", f"admin:remove:{item[0]}")], [button("Annuler", "admin:list")]]}
         return f"{item[1]}\n{money(item[2])}\n{item[3]}", {"inline_keyboard": [
             [button("Modifier", f"admin:edit:{item[0]}"), button("Supprimer", f"admin:delete:{item[0]}")],
+            [button("📦 Gérer le stock", f"stock:product:{item[0]}")],
             [button("‹ Admin", "admin")],
         ]}
     value = draft(store)
@@ -421,17 +423,30 @@ def commerce_screen(action, catalog, user, store):
         item = next((p for p in products(store) if number.isdigit() and p[0] == int(number)), None)
         if not item:
             return "Produit retiré du catalogue.", {"inline_keyboard": [[button("‹ Boutique", "catalog")]]}
-        if action.startswith("cosave:"):
-            change_cart(store, uid, item[0], 1)
-        elif action.startswith("quantity:") and len(bits) == 3 and bits[2] in ("up", "down"):
-            change_cart(store, uid, item[0], 1 if bits[2] == "up" else -1)
+        available=stock_values().get(item[0],0)
         row = next((r for r in commerce_cart(store, uid) if r[0] == item[0]), None)
-        qty = row[4] if row else 0
-        return f"{item[1]}\nPrix : {money(item[2])}\nDans votre panier : {qty}\nSous-total : {money(item[2] * qty)}", {"inline_keyboard": [
-            [button("−", f"quantity:{item[0]}:down"), button(f"Qté : {qty}", f"cosmetic:{item[0]}"), button("＋", f"quantity:{item[0]}:up")],
-            [button("🛒 Ajouter au panier", f"cosave:{item[0]}")],
-            [button("‹ Boutique", "catalog"), button("🛒 Mon panier", "basket")],
-        ]}
+        current=row[4] if row else 0
+        increasing=action.startswith("cosave:") or action==f"quantity:{item[0]}:up"
+        limit=min(available,99)
+        if increasing and current<limit:
+            change_cart(store,uid,item[0],1)
+        elif action==f"quantity:{item[0]}:down":
+            change_cart(store,uid,item[0],-1)
+        row = next((r for r in commerce_cart(store, uid) if r[0] == item[0]), None)
+        qty=row[4] if row else 0
+        text=f"{item[1]}\nPrix : {money(item[2])}\n"
+        text+= "RUPTURE DE STOCK" if available==0 else f"Disponible : {available}"
+        text+=f"\nDans votre panier : {qty}\nSous-total : {money(item[2]*qty)}"
+        if increasing and current>=limit:text+="\nLimite de quantité atteinte."
+        rows=[]
+        controls=[]
+        if qty:controls.append(button("−",f"quantity:{item[0]}:down"))
+        controls.append(button(f"Qté : {qty}",f"cosmetic:{item[0]}"))
+        if qty<limit:controls.append(button("＋",f"quantity:{item[0]}:up"))
+        rows.append(controls)
+        if qty<limit:rows.append([button("🛒 Ajouter au panier",f"cosave:{item[0]}")])
+        rows.append([button("‹ Boutique","catalog"),button("🛒 Mon panier","basket")])
+        return text,{"inline_keyboard":rows}
     if action == "clear":
         with store.db:
             store.db.execute("DELETE FROM cosmetic_cart WHERE user_id=?", (uid,))
@@ -501,7 +516,8 @@ def commerce_screen(action, catalog, user, store):
     if action == "profile":
         data = bridge("profile", user=user)
         return f"👤 Mon profil\n\nBonjour {str(user.get('first_name') or 'Membre')[:100]} !\nPoints fidélité : {data['points']}\nPoints parrainage : {data['referral_points']}\nCode parrainage : {data['referral_code']}", {"inline_keyboard": [
-            [button("Ma dernière commande", "order_status")], [button("‹ Retour", "menu")],
+            [button("📦 Mondial Relay", "tracking")],
+        [button("Ma dernière commande", "order_status")], [button("‹ Retour", "menu")],
         ]}
     return None
 
@@ -625,7 +641,8 @@ def ui_screen(action, catalog, user, store):
             return "Cette catégorie a été supprimée.", {"inline_keyboard": [[button("‹ Boutique", "catalog")]]}
         aliases = {row[0] for row in store.db.execute("SELECT name FROM bot_ui_aliases WHERE category_id=?", (cat[0],))}
         rows = [[button(item["title"], f"info:{i}")] for i, item in enumerate(catalog) if item.get("category") in aliases]
-        rows += [[button(f"{p[1]} · {money(p[2])}", f"cosmetic:{p[0]}")] for p in products(store) if p[3] == cat[1]]
+        available=stock_values()
+        rows += [[button(f"{p[1]} · {money(p[2])}" + (" · RUPTURE DE STOCK" if available.get(p[0],0)==0 else ""), f"cosmetic:{p[0]}")] for p in products(store) if p[3] == cat[1]]
         return cat[1] + "\n\n" + ("Choisissez un produit ou une fiche." if rows else "Aucun produit pour le moment."), {"inline_keyboard": rows + [[button("‹ Boutique", "catalog")]]}
     if not action.startswith("ui:"):
         return None
@@ -742,7 +759,8 @@ def ui_text(text, user, store):
 
 
 def screen(action, catalog, user, store):
-    result = ui_screen(action,catalog,user,store)
+    result=stock_screen(action,catalog,user,store)
+    if result is None:result = ui_screen(action,catalog,user,store)
     if result is None:
         result = _screen(action,catalog,user,store)
     return personalize(result, store)
@@ -750,7 +768,8 @@ def screen(action, catalog, user, store):
 
 def admin_text(text, user, store):
     before = draft(store).get("step", "") if user["id"] == ADMIN_ID else ""
-    result = ui_text(text,user,store)
+    result=stock_text(text,user,store)
+    if result is None:result = ui_text(text,user,store)
     if result is None:
         result = _admin_text(text,user,store)
     if before in ("ui_renamecat", "ui_newcat") and not draft(store).get("step"):
@@ -760,6 +779,72 @@ def admin_text(text, user, store):
             if result:
                 result = (result[0] + "\nLa synchronisation sera retentée automatiquement.", result[1])
     return personalize(result,store)
+
+
+def stock_values():
+    result=bridge("stocks")
+    return {item["id"]:item["available"] for item in result["stocks"]}
+
+
+def stock_screen(action,catalog,user,store):
+    if action=="tracking":
+        result=bridge("tracking",user=user)
+        text="📦 Mondial Relay\n\n"
+        rows=[]
+        if not result["orders"]:
+            text+="Aucun numéro de suivi enregistré. Il apparaîtra ici lorsque NyxPepz aura renseigné votre envoi."
+        for order in result["orders"]:
+            text+=f"Commande {order['reference']}\nNuméro de suivi : {order['number']}\nCode postal : {order['postal_code']}\n\n"
+            rows.append([{"text":"📦 Suivre "+order["reference"],"url":order["url"]}])
+            rows.append([{"text":"Copier le suivi","copy_text":{"text":order["number"]}},
+                         {"text":"Copier le code postal","copy_text":{"text":order["postal_code"]}}])
+        rows.append([button("‹ Mon profil","profile")])
+        return text,{"inline_keyboard":rows}
+    if not action.startswith("stock:"):
+        return None
+    if user["id"]!=ADMIN_ID:
+        return "Accès réservé à l'administrateur.",{"inline_keyboard":[[button("‹ Retour","menu")]]}
+    back={"inline_keyboard":[[button("‹ Admin","admin")]]}
+    if action=="stock:list":
+        sync_cosmetics(store)
+        values=stock_values()
+        rows=[[button(f"{p[1]} · {values.get(p[0],0)} disponible(s)",f"stock:product:{p[0]}")] for p in products(store)]
+        return "📦 Stocks disponibles" if rows else "Ajoute d'abord un produit.",{"inline_keyboard":rows+back["inline_keyboard"]}
+    if action.startswith("stock:product:"):
+        number=action.rsplit(":",1)[1]
+        product=next((p for p in products(store) if number.isdigit() and p[0]==int(number)),None)
+        if not product:return "Produit introuvable.",back
+        sync_cosmetics(store)
+        available=stock_values().get(product[0],0)
+        draft(store,{"step":"stock_quantity","product_id":product[0],"key":uuid.uuid4().hex})
+        return f"{product[1]}\nDisponible à la vente : {available}\n\nEnvoie la nouvelle quantité disponible (hors commandes déjà réservées).\n0 = RUPTURE DE STOCK.",{"inline_keyboard":[[button("Annuler","stock:list")]]}
+    if action.startswith("stock:confirm:"):
+        value=draft(store)
+        if value.get("step")!="stock_confirm" or action.rsplit(":",1)[1]!=value.get("key"):
+            return "Cette étape a expiré.",back
+        result=bridge("set_stock",user=user,product_id=value["product_id"],quantity=value["quantity"],key=value["key"])
+        draft(store,{})
+        return f"✓ Stock enregistré.\nDisponible maintenant : {result['available']}.",{"inline_keyboard":[[button("📦 Gérer les stocks","stock:list")],[button("‹ Admin","admin")]]}
+    return "Cette étape a expiré.",back
+
+
+def stock_text(text,user,store):
+    if user["id"]!=ADMIN_ID:
+        return None
+    value=draft(store)
+    if value.get("step") not in ("stock_quantity","stock_confirm"):
+        return None
+    if text.startswith("/"):
+        draft(store,{})
+        return None
+    if value["step"]=="stock_confirm":
+        return "Clique sur Confirmer ou Annuler.",{"inline_keyboard":[[button("Confirmer","stock:confirm:"+value["key"])],[button("Annuler","stock:list")]]}
+    number=text.strip()
+    if not number.isascii() or not number.isdigit() or len(number)>7 or int(number)>1000000:
+        return "Envoie un nombre entier entre 0 et 1 000 000.",{"inline_keyboard":[[button("Annuler","stock:list")]]}
+    value.update(step="stock_confirm",quantity=int(number))
+    draft(store,value)
+    return f"Définir le stock disponible à {int(number)} ?\nLes commandes déjà réservées restent réservées.",{"inline_keyboard":[[button("✓ Confirmer","stock:confirm:"+value["key"])],[button("Annuler","stock:list")]]}
 
 
 def main():
@@ -825,6 +910,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("Catalogue arrêté.")
+
 
 
 

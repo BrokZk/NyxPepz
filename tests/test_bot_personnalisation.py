@@ -21,7 +21,7 @@ class PersonnalisationTests(unittest.TestCase):
         self.admin = {"id":8843973247}
         self.customer = {"id":123}
         self.bridge = bot.bridge
-        bot.bridge = lambda *args, **kwargs: {"ok":True}
+        bot.bridge = lambda *args, **kwargs: {"ok":True,"stocks":[{"id":p[0],"available":100} for p in bot.products(self.store)]}
 
     def tearDown(self):
         bot.bridge = self.bridge
@@ -80,3 +80,4 @@ class PersonnalisationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

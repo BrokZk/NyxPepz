@@ -400,6 +400,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 status=status, stock_reserved=False), execution_options={"synchronize_session": False}).rowcount
         if not changed:
             return False
+        inventory=app.extensions.get("cosmetic_inventory")
+        if inventory:inventory["release"](order)
         for line in inventory_lines(order.lines):
             db.session.execute(update(Product).where(Product.id == line["product_id"]).values(stock=Product.stock + line["quantity"]))
         if order.reward_reserved:
@@ -822,6 +824,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             # Retain the identity and payment nonce: a delayed signed payment
             # must still become payment_review, never disappear with its order.
             if order.stock_reserved:
+                inventory=app.extensions.get("cosmetic_inventory")
+                if inventory:inventory["release"](order)
                 for line in inventory_lines(order.lines):
                     db.session.execute(update(Product).where(Product.id == line["product_id"]).values(
                         stock=Product.stock + line["quantity"]))
@@ -946,6 +950,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
             if not changed:
                 return fail("La commande a changé. Actualisez avant de valider le paiement.", 409)
             db.session.refresh(order)
+            inventory=app.extensions.get("cosmetic_inventory")
+            if inventory:inventory["ensure"](order)
             if not order.stock_reserved:
                 for line in inventory_lines(order.lines):
                     changed = db.session.execute(update(Product).where(Product.id == line["product_id"], Product.stock >= line["quantity"]).values(stock=Product.stock - line["quantity"])).rowcount
@@ -1080,6 +1086,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order,
         "config": config, "payment_link": payment_link}
     return app.extensions["nyx_shop"]
+
 
 
 

@@ -175,6 +175,10 @@ def install_delivery(app, db, User, shop):
         if order.tracking_number:
             text += '\nNuméro de suivi : ' + order.tracking_number
         payload = {"chat_id": job.recipient, "text": text[:3900]}
+        if customer and cosmetics and order.tracking_number:
+            from mondial_tracking import mondial_tracking_url
+            payload["reply_markup"]={"inline_keyboard":[[{"text":"📦 Mondial Relay",
+                "url":mondial_tracking_url(order.tracking_number,order.contact.get("postal_code",""))}]]}
         if contact_url:
             payload["reply_markup"] = {"inline_keyboard": [[{"text": "Contacter le client", "url": contact_url}]]}
         response = requests.post('https://api.telegram.org/bot' + token + '/sendMessage', json=payload, timeout=20)
@@ -284,6 +288,7 @@ def install_delivery(app, db, User, shop):
     shop['run_jobs'] = run_jobs
     shop['sheet_write'] = sheet_write
     shop['telegram_send'] = telegram_send
+
 
 
 
