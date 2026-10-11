@@ -35,6 +35,7 @@ class CosmeticsTests(ShopTests):
         response.json.return_value = {"polygon_address_in": "0x" + "2" * 40, "address_in": "fake-wallet"}
         self.wallet.start().return_value = response
         self.request_bridge("sync", products=[dict(id=1, name="Crème beauté", cents=1050, category="Anti-Age/Peau/Cheveux")])
+        self.request_bridge("set_stock", user={"id":8843973247}, product_id=1, quantity=100, key=uuid.uuid4().hex)
 
     def tearDown(self):
         self.wallet.stop()
@@ -136,4 +137,5 @@ class CosmeticsTests(ShopTests):
         self.assertEqual(m.ReferralOrderEvent.query.count(), 1)
         self.assertEqual(m.db.session.get(m.User, 3).referral_points, 2)
         self.assertEqual(m.referral_rewards["balance"](m.db.session.get(m.User,3)), 2.1)
+
 

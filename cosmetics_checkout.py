@@ -107,6 +107,9 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
         __table_args__ = (db.UniqueConstraint("order_id", "event", name="uq_cosmetic_admin_notice"),)
 
     Order, Profile = shop["Order"], shop["Profile"]
+    from cosmetic_inventory import install_cosmetic_inventory
+    from mondial_tracking import mondial_tracking_url
+    inventory=install_cosmetic_inventory(app,db,CosmeticCatalog,Order)
 
     def admin_notice(order, event):
         if not CosmeticAdminNotice.query.filter_by(order_id=order.id, event=event).first():
@@ -144,6 +147,7 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
             product = CosmeticCatalog.query.filter_by(id=pid).with_for_update().populate_existing().first()
             if not product or not product.active:
                 raise ValueError("Un produit a été retiré. Revenez au panier.")
+            inventory["check"](pid,qty)
             lines.append(dict(kind="cosmetic", cosmetic_id=pid, name=product.name, format="Cosmétique",
                               quantity=qty, unit_cents=product.cents, line_cents=product.cents * qty))
         lines.sort(key=lambda x: x["cosmetic_id"])
@@ -222,6 +226,7 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
                         product = CosmeticCatalog(id=item["id"])
                         db.session.add(product)
                     product.name, product.cents, product.category, product.active = item["name"], item["cents"], item["category"], True
+                    inventory["row"](item["id"])  # Metadata sync never replaces quantities.
                 for pid, product in current.items():
                     if pid not in active:
                         product.active = False
@@ -273,7 +278,30 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
                     CosmeticAdminNotice.sent==False).values(sent=True)).rowcount
                 db.session.commit()
                 return jsonify(ok=bool(count))
+            if action=="stocks":
+                result=[dict(id=product.id,available=inventory["availability"](product.id))
+                        for product in CosmeticCatalog.query.filter_by(active=True).order_by(CosmeticCatalog.id)]
+                db.session.commit()
+                return jsonify(stocks=result)
             user = owned_user(data.get("user") or {})
+            if action=="set_stock":
+                if user.telegram_id!=8843973247:return fail("Accès Admin refusé.",403)
+                pid,key=data.get("product_id"),data.get("key")
+                if type(pid) is not int or pid<1 or not isinstance(key,str) or not re.fullmatch("[a-f0-9]{32}",key):
+                    return fail("Modification de stock invalide.")
+                available,duplicate=inventory["set_available"](pid,data.get("quantity"),key)
+                db.session.commit()
+                return jsonify(available=available,duplicate=duplicate)
+            if action=="tracking":
+                rows=Order.query.filter_by(user_id=user.id).filter(
+                    Order.status.in_(("paid","shipped","available","delivered")),
+                    Order.tracking_number.isnot(None),Order.tracking_number!="").order_by(Order.id.desc()).limit(20).all()
+                result=[dict(reference=order.reference,number=order.tracking_number,
+                             postal_code=order.contact.get("postal_code",""),
+                             status=order.status,url=mondial_tracking_url(order.tracking_number,order.contact.get("postal_code","")))
+                        for order in rows]
+                db.session.commit()
+                return jsonify(orders=result)
             if action == "profile":
                 db.session.commit()
                 return jsonify(points=user.loyalty_points, referral_points=app.extensions["referral_rewards"]["balance"](user), referral_code=user.referral_code)
@@ -389,6 +417,7 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
                           created_at=now, expires_at=now + 3600, payment_nonce=secrets.token_urlsafe(32))
             db.session.add(order)
             db.session.flush()
+            inventory["reserve"](order)
             entry.order_id = order.id
             profile = db.session.get(Profile, user.id)
             if not profile:
@@ -404,6 +433,7 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
         except (SQLAlchemyError, TypeError):
             return fail("Enregistrement temporairement indisponible. Réessayez avec le même panier.", 503)
 
-    return {"Catalog": CosmeticCatalog, "Draft": CosmeticDraft, "Delivery": CosmeticDelivery, "AdminNotice": CosmeticAdminNotice, "quote": quote}
+    return {"Catalog": CosmeticCatalog, "Draft": CosmeticDraft, "Delivery": CosmeticDelivery, "AdminNotice": CosmeticAdminNotice, "quote": quote, "inventory": inventory}
+
 
 
