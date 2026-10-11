@@ -61,8 +61,9 @@ def valid_products(values):
             raise ValueError("Nom du produit invalide.")
         if type(item["cents"]) is not int or not 1 <= item["cents"] <= 99999999:
             raise ValueError("Prix cosmétique invalide.")
-        if item["category"] not in CATEGORIES:
-            raise ValueError("Catégorie inconnue.")
+        category = item["category"]
+        if not isinstance(category, str) or not 1 <= len(category.strip()) <= 48 or any(ord(c) < 32 or ord(c) == 127 for c in category):
+            raise ValueError("Nom de catégorie invalide.")
     return values
 
 
@@ -96,7 +97,22 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
         lease = db.Column(db.String(64))
         lease_until = db.Column(db.BigInteger, default=0, nullable=False)
 
+    class CosmeticAdminNotice(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        order_id = db.Column(db.Integer, db.ForeignKey("shop_order.id"), nullable=False)
+        event = db.Column(db.String(80), nullable=False)
+        sent = db.Column(db.Boolean, default=False, nullable=False)
+        lease = db.Column(db.String(64))
+        lease_until = db.Column(db.BigInteger, default=0, nullable=False)
+        __table_args__ = (db.UniqueConstraint("order_id", "event", name="uq_cosmetic_admin_notice"),)
+
     Order, Profile = shop["Order"], shop["Profile"]
+
+    def admin_notice(order, event):
+        if not CosmeticAdminNotice.query.filter_by(order_id=order.id, event=event).first():
+            db.session.add(CosmeticAdminNotice(order_id=order.id, event=event))
+
+    app.extensions["cosmetics_admin_notice"] = admin_notice
 
     def fail(message, status=400):
         db.session.rollback()
@@ -235,6 +251,28 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
                     CosmeticDelivery.sent == False).values(sent=True)).rowcount
                 db.session.commit()
                 return jsonify(ok=bool(count))
+            if action == "admin_notices":
+                now = int(time.time())
+                jobs = CosmeticAdminNotice.query.filter_by(sent=False).filter(CosmeticAdminNotice.lease_until < now).order_by(CosmeticAdminNotice.id).limit(10).all()
+                result = []
+                for job in jobs:
+                    lease = secrets.token_hex(24)
+                    changed = db.session.execute(update(CosmeticAdminNotice).where(
+                        CosmeticAdminNotice.id == job.id, CosmeticAdminNotice.sent == False,
+                        CosmeticAdminNotice.lease_until < now).values(lease=lease,lease_until=now+90)).rowcount
+                    if changed:
+                        order = db.session.get(Order,job.order_id)
+                        owner = db.session.get(User,order.user_id)
+                        result.append(dict(id=job.id,lease=lease,reference=order.reference,telegram_id=owner.telegram_id,
+                                           total_cents=order.total_cents,event=job.event,status=order.status))
+                db.session.commit()
+                return jsonify(notices=result)
+            if action == "ack_admin_notice":
+                count=db.session.execute(update(CosmeticAdminNotice).where(
+                    CosmeticAdminNotice.id==data.get("id"),CosmeticAdminNotice.lease==data.get("lease"),
+                    CosmeticAdminNotice.sent==False).values(sent=True)).rowcount
+                db.session.commit()
+                return jsonify(ok=bool(count))
             user = owned_user(data.get("user") or {})
             if action == "profile":
                 db.session.commit()
@@ -264,6 +302,17 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
                 order = db.session.get(Order, entry.order_id) if entry.order_id else None
                 db.session.commit()
                 return jsonify(reference=order.reference if order else None, status=order.status if order else "coordonnees_attendues")
+            if action == "alternate_payment":
+                entry = CosmeticDraft.query.filter_by(id=data.get("draft_id"), user_id=user.id).first()
+                if not entry or not entry.order_id:
+                    return fail("Commande introuvable.",404)
+                order = Order.query.filter_by(id=entry.order_id,user_id=user.id).with_for_update().populate_existing().first()
+                if not order or order.status not in ("awaiting_payment","payment_review") or (order.status=="awaiting_payment" and order.expires_at<=int(time.time())):
+                    return fail("Cette commande ne peut plus recevoir une demande de paiement.",409)
+                previous = CosmeticAdminNotice.query.filter_by(order_id=order.id,event="alternate_payment").first()
+                admin_notice(order,"alternate_payment")
+                db.session.commit()
+                return jsonify(ok=True,duplicate=bool(previous),reference=order.reference)
             if action == "retry_payment":
                 entry = CosmeticDraft.query.filter_by(id=data.get("draft_id"), user_id=user.id).first()
                 if not entry or not entry.order_id:
@@ -355,4 +404,5 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
         except (SQLAlchemyError, TypeError):
             return fail("Enregistrement temporairement indisponible. Réessayez avec le même panier.", 503)
 
-    return {"Catalog": CosmeticCatalog, "Draft": CosmeticDraft, "Delivery": CosmeticDelivery, "quote": quote}
+    return {"Catalog": CosmeticCatalog, "Draft": CosmeticDraft, "Delivery": CosmeticDelivery, "AdminNotice": CosmeticAdminNotice, "quote": quote}
+

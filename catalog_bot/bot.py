@@ -100,9 +100,12 @@ def admin_screen(action, user, store):
         return "⚙️ Admin — catalogue de cosmétiques", {"inline_keyboard": [
             [button("＋ Ajouter un produit", "admin:new")],
             [button("Modifier / supprimer", "admin:list")],
+            [button("🎛 Boutons et catégories", "ui:menu")],
             [button("‹ Retour", "menu")],
         ]}
     if action == "admin:new" or action.startswith("admin:edit:"):
+        if not categories(store):
+            return "Crée d'abord une catégorie dans Boutons et catégories.", {"inline_keyboard": [[button("Créer une catégorie", "ui:newcat")]]}
         value = {"step": "name"}
         if action.startswith("admin:edit:"):
             number = action.rsplit(":", 1)[1]
@@ -133,12 +136,17 @@ def admin_screen(action, user, store):
     value = draft(store)
     if action.startswith("admin:category:") and value.get("step") == "category":
         number = action.rsplit(":", 1)[1]
-        if not number.isdigit() or int(number) >= len(CATEGORIES):
-            return None
-        value.update(category=CATEGORIES[int(number)], step="confirm")
+        category = category_by_id(store, number)
+        if not category:
+            return "Catégorie supprimée. Choisis une autre catégorie.", {"inline_keyboard": category_rows(store, "admin:category:") + [[button("Annuler", "admin")]]}
+        value.update(category=category[1], step="confirm")
         draft(store, value)
         return f"Confirmer ce produit ?\n\n{value['name']}\n{money(value['cents'])}\n{value['category']}", {"inline_keyboard": [[button("✓ Enregistrer", "admin:confirm")], [button("Annuler", "admin")]]}
     if action == "admin:confirm" and value.get("step") == "confirm":
+        if value["category"] not in [name for _,name in categories(store)]:
+            value["step"] = "category"
+            draft(store,value)
+            return "La catégorie a changé. Choisis sa nouvelle destination.", {"inline_keyboard": category_rows(store, "admin:category:") + [[button("Annuler", "admin")]]}
         with store.db:
             if "id" in value:
                 store.db.execute("UPDATE cosmetic_products SET name=?,cents=?,category=? WHERE id=?", (value["name"],value["cents"],value["category"],value["id"]))
@@ -151,7 +159,7 @@ def admin_screen(action, user, store):
     return "Cette étape a expiré. Recommence depuis Admin.", cancel
 
 
-def admin_text(text, user, store):
+def _admin_text(text, user, store):
     if user["id"] != ADMIN_ID:
         return None
     if text.startswith("/"):
@@ -175,11 +183,7 @@ def admin_text(text, user, store):
             return "Le prix doit être compris entre 0,01 et 999 999,99 euros.", cancel
         value.update(cents=cents, step="category")
         draft(store, value)
-        return "3/3 — Choisis la catégorie.", {"inline_keyboard": [
-            [button(CATEGORIES[0], "admin:category:0"), button(CATEGORIES[1], "admin:category:1")],
-            [button(CATEGORIES[2], "admin:category:2"), button(CATEGORIES[3], "admin:category:3")],
-            [button("Annuler", "admin")],
-        ]}
+        return "3/3 — Choisis la catégorie.", {"inline_keyboard": category_rows(store, "admin:category:") + [[button("Annuler", "admin")]]}
     if value:
         return "Utilise les boutons pour terminer ou annuler.", cancel
     return None
@@ -202,7 +206,7 @@ def cosmetic_screen(action, user, store):
     return text, {"inline_keyboard": rows}
 
 
-def screen(action, catalog, user, store):
+def _screen(action, catalog, user, store):
     commerce = commerce_screen(action, catalog, user, store)
     if commerce is not None:
         return commerce
@@ -301,7 +305,7 @@ def handle(update, catalog, api, store):
         result = admin_text(message.get("text", ""), user, store) if not query else None
         if result is None:
             result = screen(action, catalog, user, store)
-        if action in ("admin:confirm",) or action.startswith("admin:remove:"):
+        if action in ("admin:confirm", "ui:confirm_delete") or action.startswith("admin:remove:"):
             sync_cosmetics(store)
     except BridgeError as error:
         result = (str(error), {"inline_keyboard": [[button("Réessayer depuis le panier", "basket")], [button("‹ Retour", "menu")]]})
@@ -472,6 +476,12 @@ def commerce_screen(action, catalog, user, store):
             [button("Vérifier ma commande", "order_status")],
             [button("‹ Mon panier", "basket")],
         ]}
+    if action.startswith("alternate:"):
+        draft_id = action.partition(":")[2]
+        if len(draft_id)!=32 or any(c not in "0123456789abcdef" for c in draft_id):
+            return "Commande introuvable.", {"inline_keyboard":[[button("‹ Retour","menu")]]}
+        result = bridge("alternate_payment",user=user,draft_id=draft_id)
+        return "✓ Demande déjà transmise." if result.get("duplicate") else "✓ Demande transmise. L'administrateur vous contactera pour proposer un autre moyen de paiement.", {"inline_keyboard":[[button("‹ Retour","menu")]]}
     if action in ("order_status", "retry_payment"):
         saved = store.db.execute("SELECT draft_id FROM cosmetic_checkout WHERE user_id=?", (uid,)).fetchone()
         if not saved or not saved[0]:
@@ -502,7 +512,7 @@ def deliver_payments(store, api):
         try:
             api("sendMessage", {"chat_id": delivery["user_id"],
                 "text": f"✓ Coordonnées enregistrées\nCommande {delivery['reference']}\nTotal : {money(delivery['total_cents'])}\n\nVoici votre lien de paiement. Les points seront crédités après validation du paiement.",
-                "reply_markup": {"inline_keyboard": [[{"text": "💳 Payer ma commande", "url": delivery["payment_url"]}], [button("Vérifier ma commande", "order_status")]]}})
+                "reply_markup": {"inline_keyboard": [[{"text": "💳 Payer ma commande", "url": delivery["payment_url"]}], [button("Autre moyen de paiement", "alternate:" + delivery["draft_id"])], [button("Vérifier ma commande", "order_status")]]}})
         except ApiError as error:
             if error.code not in (400, 403):
                 raise
@@ -514,6 +524,242 @@ def deliver_payments(store, api):
         if saved and saved[1] == delivery["draft_id"] and saved[0] == cart_fingerprint(store, uid):
             with store.db:
                 store.db.execute("DELETE FROM cosmetic_cart WHERE user_id=?", (uid,))
+
+
+def deliver_admin_notices(api):
+    result = bridge("admin_notices")
+    headings = {"created":"🛒 Nouvelle commande — paiement en attente", "paid":"✅ Paiement validé",
+                "alternate_payment":"☎️ Autre moyen de paiement demandé",
+                "shipped":"📦 Commande expédiée", "available":"📦 Commande au point de retrait",
+                "delivered":"📦 Commande livrée", "expired":"Commande expirée",
+                "cancelled":"Commande annulée", "deleted":"Commande supprimée",
+                "payment_help":"☎️ Autre moyen de paiement demandé"}
+    for notice in result["notices"]:
+        event = notice["event"]
+        heading = headings.get(event,"💳 Paiement reçu — montant à vérifier" if event.startswith("payment_received") else "Mise à jour de commande")
+        text = f"{heading}\nRéférence : {notice['reference']}\nID Telegram : {notice['telegram_id']}\nTotal : {money(notice['total_cents'])}"
+        if event in ("alternate_payment","payment_help") and notice["status"] not in ("awaiting_payment","payment_review"):
+            text += "\nLa demande est antérieure : vérifiez le statut actuel dans l'admin."
+        payload = {"chat_id":ADMIN_ID,"text":text,"reply_markup":{"inline_keyboard":[[
+            {"text":"Contacter le client","url":"tg://user?id="+str(notice["telegram_id"])}
+        ]]}}
+        try:
+            api("sendMessage",payload)
+        except ApiError as error:
+            if error.code == 400:
+                # Some accounts cannot be linked by ID. Keep the ID in the text.
+                payload.pop("reply_markup",None)
+                api("sendMessage",payload)
+            else:
+                raise
+        bridge("ack_admin_notice",id=notice["id"],lease=notice["lease"])
+
+
+LABELS = {"catalog": ("🛍", "Boutique"), "profile": ("👤", "Mon profil"), "basket": ("🛒", "Mon panier")}
+
+
+def setup_ui(store):
+    with store.db:
+        store.db.execute("CREATE TABLE IF NOT EXISTS bot_ui_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)")
+        store.db.execute("CREATE TABLE IF NOT EXISTS bot_ui_aliases (name TEXT PRIMARY KEY, category_id INTEGER NOT NULL)")
+        store.db.execute("CREATE TABLE IF NOT EXISTS bot_ui_labels (action TEXT PRIMARY KEY, name TEXT NOT NULL)")
+        store.db.execute("CREATE TABLE IF NOT EXISTS bot_ui_migrations (name TEXT PRIMARY KEY)")
+        if not store.db.execute("SELECT name FROM bot_ui_migrations WHERE name='initial'").fetchone():
+            names = list(CATEGORIES)
+            for product in products(store):
+                if product[3] not in names:
+                    names.append(product[3])
+            for cid, name in enumerate(names):
+                store.db.execute("INSERT INTO bot_ui_categories VALUES (?,?)", (cid, name))
+                store.db.execute("INSERT INTO bot_ui_aliases VALUES (?,?)", (name, cid))
+            store.db.execute("INSERT INTO bot_ui_migrations VALUES ('initial')")
+
+
+def categories(store):
+    return store.db.execute("SELECT id,name FROM bot_ui_categories ORDER BY id").fetchall()
+
+
+def category_by_id(store, number):
+    if not str(number).isdigit():
+        return None
+    return store.db.execute("SELECT id,name FROM bot_ui_categories WHERE id=?", (int(number),)).fetchone()
+
+
+def category_rows(store, prefix="category:", exclude=None):
+    buttons = [button(name, prefix + str(cid)) for cid, name in categories(store) if cid != exclude]
+    return [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+
+
+def ui_label(store, action):
+    icon, default = LABELS[action]
+    row = store.db.execute("SELECT name FROM bot_ui_labels WHERE action=?", (action,)).fetchone()
+    return icon + " " + (row[0] if row else default)
+
+
+def ui_name(name):
+    return isinstance(name, str) and 1 <= len(name.strip()) <= 48 and not any(ord(c) < 32 or ord(c) == 127 for c in name)
+
+
+def personalize(result, store):
+    if result is None:
+        return None
+    text, keyboard = result
+    for row in keyboard.get("inline_keyboard", []):
+        for entry in row:
+            action = entry.get("callback_data")
+            if action in LABELS:
+                prefix = "‹ " if entry["text"].startswith("‹") else ""
+                entry["text"] = prefix + ui_label(store, action)
+    for old, action in (("🛍 Boutique", "catalog"), ("👤 Consulter mon profil", "profile"), ("🛒 Mon Panier", "basket")):
+        text = text.replace(old, ui_label(store, action))
+    return text, keyboard
+
+
+def ui_screen(action, catalog, user, store):
+    back = {"inline_keyboard": [[button("‹ Réglages", "ui:menu")]]}
+    if action == "catalog":
+        return "🛍 Boutique\n\nChoisissez une catégorie.", {"inline_keyboard": category_rows(store) + [[button("‹ Retour", "menu")]]}
+    if action.startswith("category:"):
+        cat = category_by_id(store, action.partition(":")[2])
+        if not cat:
+            return "Cette catégorie a été supprimée.", {"inline_keyboard": [[button("‹ Boutique", "catalog")]]}
+        aliases = {row[0] for row in store.db.execute("SELECT name FROM bot_ui_aliases WHERE category_id=?", (cat[0],))}
+        rows = [[button(item["title"], f"info:{i}")] for i, item in enumerate(catalog) if item.get("category") in aliases]
+        rows += [[button(f"{p[1]} · {money(p[2])}", f"cosmetic:{p[0]}")] for p in products(store) if p[3] == cat[1]]
+        return cat[1] + "\n\n" + ("Choisissez un produit ou une fiche." if rows else "Aucun produit pour le moment."), {"inline_keyboard": rows + [[button("‹ Boutique", "catalog")]]}
+    if not action.startswith("ui:"):
+        return None
+    if user["id"] != ADMIN_ID:
+        return "Accès réservé à l'administrateur.", {"inline_keyboard": [[button("‹ Retour", "menu")]]}
+    if action == "ui:menu":
+        draft(store, {})
+        return "🎛 Boutons et catégories", {"inline_keyboard": [
+            [button("Renommer les boutons", "ui:labels")],
+            [button("Gérer les catégories", "ui:categories")],
+            [button("‹ Admin", "admin")],
+        ]}
+    if action == "ui:labels":
+        return "Choisis le bouton à renommer.", {"inline_keyboard": [
+            [button(ui_label(store, key), "ui:label:" + key)] for key in LABELS
+        ] + [[button("‹ Réglages", "ui:menu")]]}
+    if action.startswith("ui:label:"):
+        key = action.rsplit(":", 1)[1]
+        if key not in LABELS:
+            return None
+        draft(store, {"step":"ui_label","action":key})
+        return "Envoie le nouveau nom du bouton (48 caractères maximum). L'emoji sera conservé.", back
+    if action == "ui:categories":
+        return "Gérer les catégories", {"inline_keyboard": [
+            [button("＋ Ajouter une catégorie", "ui:newcat")]
+        ] + [[button(name, f"ui:cat:{cid}")] for cid, name in categories(store)] + [[button("‹ Réglages", "ui:menu")]]}
+    if action == "ui:newcat":
+        if len(categories(store)) >= 16:
+            return "Maximum : 16 catégories.", back
+        draft(store, {"step":"ui_newcat"})
+        return "Envoie le nom de la nouvelle catégorie (48 caractères maximum).", back
+    if action.startswith(("ui:cat:", "ui:rename:", "ui:delete:")):
+        cat = category_by_id(store, action.rsplit(":",1)[1])
+        if not cat:
+            return "Catégorie introuvable.", back
+        if action.startswith("ui:rename:"):
+            draft(store, {"step":"ui_renamecat","id":cat[0]})
+            return "Envoie le nouveau nom de cette catégorie.", back
+        if action.startswith("ui:delete:"):
+            has_products = any(p[3] == cat[1] for p in products(store))
+            aliases = {r[0] for r in store.db.execute("SELECT name FROM bot_ui_aliases WHERE category_id=?", (cat[0],))}
+            has_docs = any(item.get("category") in aliases for item in catalog)
+            if (has_products or has_docs) and len(categories(store)) == 1:
+                return "Cette catégorie contient des produits ou fiches. Crée une autre catégorie pour les déplacer.", back
+            value = {"step":"ui_delete","id":cat[0],"needs_target":bool(has_products or has_docs)}
+            draft(store, value)
+            if value["needs_target"]:
+                return "Choisis où déplacer les produits et fiches avant de supprimer cette catégorie.", {"inline_keyboard": category_rows(store, "ui:move:", exclude=cat[0]) + [[button("Annuler", "ui:categories")]]}
+            return "Supprimer la catégorie vide « " + cat[1] + " » ?", {"inline_keyboard": [[button("Confirmer", "ui:confirm_delete")], [button("Annuler", "ui:categories")]]}
+        return cat[1], {"inline_keyboard": [[button("Renommer", f"ui:rename:{cat[0]}"), button("Supprimer", f"ui:delete:{cat[0]}")], [button("‹ Catégories", "ui:categories")]]}
+    value = draft(store)
+    if action.startswith("ui:move:") and value.get("step") == "ui_delete":
+        target = category_by_id(store, action.rsplit(":",1)[1])
+        if not target or target[0] == value["id"]:
+            return "Catégorie de destination invalide.", back
+        value["target"] = target[0]
+        draft(store, value)
+        return "Déplacer les produits et fiches vers « " + target[1] + " » puis supprimer leur ancienne catégorie ?", {"inline_keyboard": [[button("Confirmer", "ui:confirm_delete")], [button("Annuler", "ui:categories")]]}
+    if action == "ui:confirm_delete" and value.get("step") == "ui_delete":
+        cat = category_by_id(store, value["id"])
+        target = category_by_id(store, value.get("target", ""))
+        if not cat or (value["needs_target"] and not target):
+            return "Cette opération a expiré.", back
+        if any(p[3] == cat[1] for p in products(store)) and not target:
+            return "Des produits ont été ajoutés. Recommence la suppression pour choisir une destination.", back
+        with store.db:
+            if target:
+                store.db.execute("UPDATE cosmetic_products SET category=? WHERE category=?", (target[1],cat[1]))
+                store.db.execute("UPDATE bot_ui_aliases SET category_id=? WHERE category_id=?", (target[0],cat[0]))
+            else:
+                store.db.execute("DELETE FROM bot_ui_aliases WHERE category_id=?", (cat[0],))
+            store.db.execute("DELETE FROM bot_ui_categories WHERE id=?", (cat[0],))
+            store.db.execute("DELETE FROM admin_drafts WHERE user_id=?", (ADMIN_ID,))
+        return "✓ Catégorie supprimée. Les produits ont été conservés.", back
+    return "Cette étape a expiré. Reviens aux réglages.", back
+
+
+def ui_text(text, user, store):
+    if user["id"] != ADMIN_ID:
+        return None
+    value = draft(store)
+    step = value.get("step", "")
+    if not step.startswith("ui_"):
+        return None
+    if text.startswith("/"):
+        draft(store,{})
+        return None
+    back = {"inline_keyboard": [[button("Annuler", "ui:menu")]]}
+    if step not in ("ui_label", "ui_newcat", "ui_renamecat"):
+        return "Utilise les boutons de confirmation ou Annuler.", back
+    name = text.strip()
+    if not ui_name(name):
+        return "Envoie un nom sur une ligne, de 1 à 48 caractères.", back
+    if step != "ui_label":
+        if any(other.casefold() == name.casefold() and cid != value.get("id") for cid, other in categories(store)):
+            return "Ce nom de catégorie existe déjà. Choisis un autre nom.", back
+        if step == "ui_newcat" and len(categories(store)) >= 16:
+            return "Maximum : 16 catégories.", back
+    with store.db:
+        if step == "ui_label":
+            store.db.execute("INSERT OR REPLACE INTO bot_ui_labels VALUES (?,?)", (value["action"], name))
+        elif step == "ui_newcat":
+            cid = store.db.execute("INSERT INTO bot_ui_categories (name) VALUES (?)", (name,)).lastrowid
+            store.db.execute("INSERT OR REPLACE INTO bot_ui_aliases VALUES (?,?)", (name,cid))
+        else:
+            cat = category_by_id(store,value["id"])
+            if not cat:
+                return "Cette catégorie a été supprimée.", back
+            store.db.execute("UPDATE bot_ui_categories SET name=? WHERE id=?", (name,cat[0]))
+            store.db.execute("UPDATE cosmetic_products SET category=? WHERE category=?", (name,cat[1]))
+            store.db.execute("INSERT OR REPLACE INTO bot_ui_aliases VALUES (?,?)", (name,cat[0]))
+        store.db.execute("DELETE FROM admin_drafts WHERE user_id=?", (ADMIN_ID,))
+    return "✓ Modification enregistrée.", {"inline_keyboard": [[button("🎛 Boutons et catégories", "ui:menu")], [button("Voir le menu", "menu")]]}
+
+
+def screen(action, catalog, user, store):
+    result = ui_screen(action,catalog,user,store)
+    if result is None:
+        result = _screen(action,catalog,user,store)
+    return personalize(result, store)
+
+
+def admin_text(text, user, store):
+    before = draft(store).get("step", "") if user["id"] == ADMIN_ID else ""
+    result = ui_text(text,user,store)
+    if result is None:
+        result = _admin_text(text,user,store)
+    if before in ("ui_renamecat", "ui_newcat") and not draft(store).get("step"):
+        try:
+            sync_cosmetics(store)
+        except BridgeError:
+            if result:
+                result = (result[0] + "\nLa synchronisation sera retentée automatiquement.", result[1])
+    return personalize(result,store)
 
 
 def main():
@@ -531,6 +777,7 @@ def main():
         raise SystemExit(f"Vérification Telegram impossible (code {error.code}).") from None
     store = SelectionStore(os.environ.get("NYXPEPZ_CATALOG_STATE_PATH") or str(Path(__file__).with_name("catalog-state.sqlite3")))
     setup_commerce(store)
+    setup_ui(store)
     with store.db:
         store.db.execute("UPDATE cosmetic_products SET category=? WHERE category=?", (CATEGORIES[3], "Récupération"))
     cursor = store.db.execute("SELECT value FROM bot_cursor WHERE id=1").fetchone()
@@ -563,6 +810,7 @@ def main():
                     sync_cosmetics(store)
                     last_sync = time.time()
                 deliver_payments(store, api)
+                deliver_admin_notices(api)
             except BridgeError as error:
                 print(str(error))
         except ApiError as error:
@@ -577,6 +825,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("Catalogue arrêté.")
+
 
 
 

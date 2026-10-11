@@ -16,7 +16,7 @@
   if(cartOwner)try{localStorage.setItem('nyx-cart-'+cartOwner,JSON.stringify(cart));}catch{}
   lastQuote=null;checkoutKey=null;checkoutPayload=null;checkoutChoice=null;updateBadge();
  }
- function updateBadge(){const count=cart.reduce((sum,x)=>sum+x.quantity,0);$id('cartCount').textContent=count||'';$id('cartCount').hidden=!count;}
+ function updateBadge(){const badge=$id('cartCount');if(!badge)return;const count=cart.reduce((sum,x)=>sum+x.quantity,0);badge.textContent=count||'';badge.hidden=!count;}
  function updateLoyalty(){
   const points=Number(me.loyalty_points||0),tiers=[150,300,500,750],next=tiers.find(t=>t>points);
   const small=document.querySelector('.loyal small');
@@ -197,3 +197,4 @@
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$id('orders').classList.contains('active'))loadOrders();});
  api('/api/shop/config').then(data=>{settings=data;updateLoyalty();updatePaymentChoices();$id('checkoutNotice').textContent=data.enabled?'':'La prise de commande est en préparation. Vous pouvez préparer votre panier.';}).catch(()=>{$id('checkoutNotice').textContent='Le service commande est indisponible pour le moment.';updatePaymentChoices();});
 })();
+
