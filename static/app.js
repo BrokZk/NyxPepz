@@ -179,7 +179,7 @@ async function loadPacks(){
  restartPromo()
 }
 
-async function loadNews(){try{let a=await api("/api/news");$("#newsList").innerHTML=a.slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" loading="lazy" alt="${escapeHTML(n.title)}" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
+async function loadNews(){if(!$("#newsList"))return;try{let a=await api("/api/news");$("#newsList").innerHTML=a.slice(0,2).map(n=>`<article>${n.image_url?`<img class="news-photo" loading="lazy" alt="${escapeHTML(n.title)}" src="${n.image_url}">`:""}<h3>${n.title}</h3><p>${n.subtitle||""}</p><em>›</em></article>`).join("")}catch{}}
 let leaderboardRequest=0,homeLeaderboardRequest=0,leaderboardPeriod='',leaderboardResetTimer;
 function scheduleLeaderboardReset(data){
  clearTimeout(leaderboardResetTimer);
@@ -350,6 +350,7 @@ async function editPackComposition(id){
  await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
  }catch(e){toast(e.message);}
 }
+
 
 
 
