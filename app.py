@@ -108,7 +108,7 @@ def auth():
 def me():
  u=current_user()
  if not u:return jsonify(error="Non authentifié"),401
- return jsonify(first_name=u.first_name,username=u.username,telegram_id=u.telegram_id,referral_code=u.referral_code,loyalty_points=u.loyalty_points,referral_points=u.referral_points,filleuls=User.query.filter_by(referred_by_user_id=u.id).count(),is_admin=is_admin(u))
+ return jsonify(first_name=u.first_name,username=u.username,telegram_id=u.telegram_id,referral_code=u.referral_code,loyalty_points=u.loyalty_points,referral_points=referral_rewards['balance'](u),filleuls=User.query.filter_by(referred_by_user_id=u.id).count(),is_admin=is_admin(u))
 @app.get("/api/catalog")
 def catalog():return jsonify([product_json(p) for p in Product.query.filter_by(active=True).order_by(Product.category,Product.sort_order,Product.id).all()])
 @app.get("/api/news")
@@ -459,10 +459,26 @@ def order_confirmed():
   db.session.execute(update(User).where(User.id==u.id).values(loyalty_points=User.loyalty_points))
   db.session.refresh(u)
   gift_order=shop['Order'].query.filter_by(reference=oid.strip().upper()).first()
+  if gift_order and (gift_order.user_id!=u.id or gift_order.status not in ("paid","shipped","available","delivered","gifted")):
+   db.session.rollback()
+   return jsonify(error="Cette commande doit être validée dans son parcours de paiement"),409
   if gift_order and gifts['is_gift_order'](gift_order):
    db.session.rollback()
    return jsonify(error="Une commande cadeau ne donne pas de crédit d’achat"),409
-  # One referral credit per person, only on their first paid order.
+  paid_products_cents=None
+  if u.referred_by_user_id is not None:
+   if gift_order:
+    paid_products_cents=gift_order.subtotal_cents-gift_order.discount_cents
+    supplied=d.get("paid_products_cents")
+    if supplied is not None and (type(supplied) is not int or supplied!=paid_products_cents):
+     db.session.rollback()
+     return jsonify(error="Montant produits incohérent avec la commande"),400
+   else:
+    paid_products_cents=d.get("paid_products_cents")
+   if type(paid_products_cents) is not int or not 0<=paid_products_cents<=10000000:
+    db.session.rollback()
+    return jsonify(error="paid_products_cents requis : montant des produits réellement payés, hors livraison"),400
+  # First order means the customer's first validated paid order, including history.
   first_paid=ConfirmedOrderEvent.query.filter_by(user_id=u.id).first() is None
   # The unique insert claims the order before any balance is changed.
   db.session.add(ConfirmedOrderEvent(external_order_id=oid,user_id=u.id,loyalty_points=points))
@@ -476,25 +492,13 @@ def order_confirmed():
    db.session.rollback()
    return jsonify(error="Compte supprimé ou plafond de points atteint"),409
   db.session.refresh(u)
-  if u.referred_by_user_id is not None and first_paid and not ReferralOrderEvent.query.filter_by(referred_user_id=u.id).first():
-   ref_id=u.referred_by_user_id
-   if ref_id==u.id:
-    db.session.rollback()
-    return jsonify(error="Auto-parrainage interdit : lien existant à corriger"),409
-   # Lock the balance before counting events; concurrent orders for this
-   # referrer cannot overwrite one another's credits (PostgreSQL and SQLite).
-   exists=db.session.execute(update(User).where(User.id==ref_id).values(
-    referral_points=User.referral_points),execution_options={"synchronize_session":False}).rowcount
-   if exists!=1:
-    db.session.rollback()
-    return jsonify(error="Parrain introuvable : lien existant à corriger"),409
-   db.session.add(ReferralOrderEvent(external_order_id=oid,referred_user_id=u.id,referrer_user_id=ref_id))
-   db.session.flush()
-   total=ReferralOrderEvent.query.filter_by(referrer_user_id=ref_id).count()
-   db.session.execute(update(User).where(User.id==ref_id).values(referral_points=total),
-    execution_options={"synchronize_session":False})
+  if u.referred_by_user_id is not None:
+   referral_rewards["credit"](oid,u.id,u.referred_by_user_id,paid_products_cents,first_paid)
   db.session.commit()
   return jsonify(ok=True)
+ except ValueError as exc:
+  db.session.rollback()
+  return jsonify(error=str(exc)),409
  except IntegrityError:
   db.session.rollback()
   # A competing request may have committed the same unique order while we
@@ -536,10 +540,10 @@ def reconcile_referrals(repair):
    if repair:
     db.session.execute(update(User).where(User.id==uid).values(referral_points=User.referral_points))
    stored=db.session.query(User.referral_points).filter(User.id==uid).scalar()
-   total=ReferralOrderEvent.query.filter_by(referrer_user_id=uid).count()
+   total=referral_rewards["expected_whole"](uid)
    if stored!=total:
     differences+=1
-    click.echo(f"Utilisateur {uid}: referral_points={stored}, événements={total}")
+    click.echo(f"Utilisateur {uid}: referral_points={stored}, points entiers attendus={total}")
     if repair:
      db.session.execute(update(User).where(User.id==uid).values(referral_points=total))
   if repair:db.session.commit()
@@ -548,6 +552,9 @@ def reconcile_referrals(repair):
  except SQLAlchemyError as exc:
   db.session.rollback()
   raise click.ClickException("Audit interrompu ; aucune correction enregistrée. Réessayez.") from exc
+
+from referral_rewards import install_referral_rewards
+referral_rewards = install_referral_rewards(app, db, User, ReferralOrderEvent)
 
 from shop import install_shop
 shop = install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent, current_user, require_admin, pack_shop)
@@ -689,4 +696,5 @@ with app.app_context():
  apply_accessory_catalog_update()
 
 if __name__=="__main__":app.run(host="0.0.0.0",port=int(os.environ.get("PORT",5000)))
+
 

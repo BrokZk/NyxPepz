@@ -134,4 +134,6 @@ class CosmeticsTests(ShopTests):
         self.assertEqual(self.confirm(ref).status_code, 200)
         self.assertEqual(self.confirm(ref).status_code, 200)
         self.assertEqual(m.ReferralOrderEvent.query.count(), 1)
-        self.assertEqual(m.db.session.get(m.User, 3).referral_points, 1)
+        self.assertEqual(m.db.session.get(m.User, 3).referral_points, 2)
+        self.assertEqual(m.referral_rewards["balance"](m.db.session.get(m.User,3)), 2.1)
+

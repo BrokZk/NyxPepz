@@ -218,7 +218,8 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
                 "countries": [{"code": k, "name": COUNTRIES[k], "shipping_cents": v} for k, v in SHIPPING.items()],
                 "loyalty_policy": policy(), "reward_configured": True,
                 "rewards": [{"points": p, "discount_cents": v} for p, v in REWARDS.items()],
-                "referral_rule": "first_paid_order",
+                "referral_rule": "first_10_then_5_percent",
+                "referral_first_percent": 10, "referral_next_percent": 5,
                 "payment_notice": "Le paiement s’ouvre chez PayGate. Les éventuels frais du prestataire y sont affichés."}
 
     def private_note(order):
@@ -704,19 +705,9 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         db.session.add(ConfirmedOrderEvent(external_order_id=order.reference, user_id=user.id, loyalty_points=points))
         user.loyalty_points += points
         order.points = points
-        already_referred = ReferralOrderEvent.query.filter_by(referred_user_id=user.id).first()
-        if order.referrer_id is not None and not already_referred and first_paid:
-            if order.referrer_id == user.id:
-                raise ValueError("Auto-parrainage interdit")
-            changed = db.session.execute(update(User).where(User.id == order.referrer_id).values(referral_points=User.referral_points)).rowcount
-            if changed != 1:
-                raise ValueError("Parrain introuvable")
-            db.session.add(ReferralOrderEvent(external_order_id=order.reference, referred_user_id=user.id, referrer_user_id=order.referrer_id))
-            db.session.flush()
-            # Preserve historical credits; from this revision there is at most
-            # one new event per referred customer, after their first paid order.
-            count = ReferralOrderEvent.query.filter_by(referrer_user_id=order.referrer_id).count()
-            db.session.execute(update(User).where(User.id == order.referrer_id).values(referral_points=count))
+        if order.referrer_id is not None:
+            app.extensions["referral_rewards"]["credit"](
+                order.reference,user.id,order.referrer_id,paid,first_paid)
 
     def order_group_filter(group):
         groups = {'action': ('awaiting_payment', 'payment_review', 'paid', 'gifted'),
@@ -1089,6 +1080,7 @@ def install_shop(app, db, User, Product, ConfirmedOrderEvent, ReferralOrderEvent
         "enqueue": enqueue, "enabled": enabled, "is_gift_order": is_gift_order,
         "config": config, "payment_link": payment_link}
     return app.extensions["nyx_shop"]
+
 
 
 

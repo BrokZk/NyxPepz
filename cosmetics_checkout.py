@@ -276,7 +276,7 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
             user = owned_user(data.get("user") or {})
             if action == "profile":
                 db.session.commit()
-                return jsonify(points=user.loyalty_points, referral_points=user.referral_points, referral_code=user.referral_code)
+                return jsonify(points=user.loyalty_points, referral_points=app.extensions["referral_rewards"]["balance"](user), referral_code=user.referral_code)
             if action == "draft":
                 if os.environ.get("COSMETICS_CHECKOUT_ENABLED") != "1":
                     return fail("Commandes cosmétiques temporairement fermées.", 503)
@@ -405,4 +405,5 @@ def install_cosmetics_checkout(app, db, User, new_code, shop):
             return fail("Enregistrement temporairement indisponible. Réessayez avec le même panier.", 503)
 
     return {"Catalog": CosmeticCatalog, "Draft": CosmeticDraft, "Delivery": CosmeticDelivery, "AdminNotice": CosmeticAdminNotice, "quote": quote}
+
 

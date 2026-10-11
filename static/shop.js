@@ -32,7 +32,7 @@
 
   $id('rewardTiers').innerHTML=rewards.map(r=>`<div class="reward-tier ${points>=r.points?'unlocked':''}"><span class="nyx-reward-gift" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v5H3zM5 12v9h14v-9M12 7v14M12 7C4 8 4 1 8 2c2 0 4 5 4 5Zm0 0c8 1 8-6 4-5-2 0-4 5-4 5Z"/></svg></span><b>${r.points} points</b><strong>${money(r.discount_cents)}</strong><small>${points>=r.points?'Disponible':r.points-points+' points restants'}</small></div>`).join('');
  }
- async function freshAccount(){try{me=await api('/api/me');$id('points').textContent=me.loyalty_points;$id('profilePoints').textContent=me.loyalty_points;$id('refpoints2').textContent=me.referral_points;updateLoyalty();}catch{}}
+ async function freshAccount(){try{me=await api('/api/me');$id('points').textContent=me.loyalty_points;$id('profilePoints').textContent=me.loyalty_points;$id('refpoints2').textContent=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:4}).format(me.referral_points);updateLoyalty();}catch{}}
  renderCatalog=function(...args){originalRender(...args);loadCart();updateBadge();updateLoyalty();
   document.querySelectorAll('#products .product').forEach((el,i)=>{
    const kind=el.hasAttribute('data-pack-id')?'pack':'product';
@@ -197,4 +197,5 @@
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$id('orders').classList.contains('active'))loadOrders();});
  api('/api/shop/config').then(data=>{settings=data;updateLoyalty();updatePaymentChoices();$id('checkoutNotice').textContent=data.enabled?'':'La prise de commande est en préparation. Vous pouvez préparer votre panier.';}).catch(()=>{$id('checkoutNotice').textContent='Le service commande est indisponible pour le moment.';updatePaymentChoices();});
 })();
+
 

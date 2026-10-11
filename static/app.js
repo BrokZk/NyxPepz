@@ -84,7 +84,7 @@ function includedSupplies(p){
  const withWater=['tesamorelin','cagrilintide','bpc157','wolverinestack','semax','selank','dsip','motsc','klow','klowstack','ghkcu','ahkcu','glow','glowstack','melanotan1','melanotan2','pt141'];
  return withWater.includes(name)?'Eau incluse':'';
 }
-async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=me.referral_points;$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
+async function boot(){try{await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:tg?.initData||""})});me=await api("/api/me");$("#hello").textContent=me.first_name||"Nyx";$("#points").textContent=me.loyalty_points;let mod=me.loyalty_points%200;$("#progressbar").style.width=Math.min(mod/2,100)+"%";$("#remaining").textContent=200-mod;$("#refpoints2").textContent=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:4}).format(me.referral_points);$("#refcode").textContent=$("#profileCode").textContent=me.referral_code;$("#filleuls").textContent=me.filleuls;$("#profileName").textContent=me.first_name||me.username||"Membre";$("#profilePoints").textContent=me.loyalty_points;if(me.is_admin){let b=document.createElement("button");b.className="admin-fab";b.textContent="⚙ Admin";b.onclick=()=>go("admin");document.body.appendChild(b)}}catch(e){toast(e.message)}
 try{products=await api("/api/catalog");await loadPacks();renderCatalog();loadHomeLeaders();loadNews()}catch(e){toast(e.message)}}
 const categoryLabels={"Perte de graisse":"Perte de poids","Beauté · peau":"Beauté / Peau","Régénération":"Régénération / Réparation","Nootropiques":"Nootropiques","Performance":"Performance / GH","Longévité":"Longévité / Anti-âge"};
 const categoryIcons={"Perte de graisse":"⚖️","Beauté · peau":"✨","Régénération":"💪","Nootropiques":"🧠","Performance":"⚡","Longévité":"🧬","Libido":"♡","Accessoires":"✚"};
@@ -349,5 +349,6 @@ async function editPackComposition(id){
  await api('/api/admin/packs/'+id,{method:'PATCH',body:JSON.stringify({components})});await loadPacks();loadAdmin();toast('Composition enregistrée');
  }catch(e){toast(e.message);}
 }
+
 
 
