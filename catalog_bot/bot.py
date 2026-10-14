@@ -854,7 +854,7 @@ def main():
     catalog = load_catalog()
     api = make_api(token)
     try:
-        if api("getMe", {}).get("username", "").lower() != "nyxpepzshopbot":
+        if api("getMe", {}).get("username", "").lower() != "nyxboutiquebot":
             raise SystemExit("Le token doit appartenir à @NyxPepzShopBot.")
         if api("getWebhookInfo", {}).get("url"):
             raise SystemExit("Un webhook est actif. Arrêtez l'ancien service avant configuration.")
