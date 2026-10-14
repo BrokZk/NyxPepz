@@ -86,7 +86,14 @@
     else location.assign('https://t.me/NyxPepzShopBot');
   };
   async function boot() {
-    if (!draftId || !tg?.initData) {status('Ouvrez ce formulaire depuis le panier de NyxPepzShopBot.', true); return;}
+  if (!draftId) {
+  status('Identifiant du panier manquant.', true);
+  return;
+}
+if (!tg?.initData) {
+  status('Authentification Telegram manquante.', true);
+  return;
+}
     try {
       const result = await api('load');
       for (const country of result.countries) form.elements.country.add(new Option(country.name, country.code));
