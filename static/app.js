@@ -57,7 +57,7 @@ $$('.page:not(#home)').forEach(page=>{const back=document.createElement('button'
 document.body.classList.add('has-page-back');
 $$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 function openShopBot(){
- const url="https://t.me/NyxPepzShopBot";
+ const url="https://t.me/NyxBoutiqueBot";
  const webApp=window.Telegram?.WebApp;
  if(typeof webApp?.openTelegramLink==="function"){
   try{webApp.openTelegramLink(url);return;}catch{}
